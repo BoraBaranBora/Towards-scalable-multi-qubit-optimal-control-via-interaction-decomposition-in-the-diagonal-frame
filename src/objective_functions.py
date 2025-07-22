@@ -124,6 +124,48 @@ def FoM_gate_transformation(
     return (1 - fidelity.item()) + primal_value + unitarity.item()
 
 
+def FoM_gate_transformation(
+    get_u: Callable,
+    time_grid,
+    parameter_set,
+    pulse_settings_list,
+    target_gate,  # Not used but kept for API consistency
+    get_drive_fn
+):
+    # Step 1: Split parameters by channel
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = np.cumsum([0] + [3 * bs for bs in bss])
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+
+    # Step 2: Get pulses
+    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
+
+    # Step 3: Primal penalty
+    primal_value = sum(
+        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
+        for i in range(len(drive))
+    )
+
+    # Step 4: Extract propagator on qubit subspace (indices 6:10 = 7:10 in Julia)
+    full_propagator = get_propagator(get_u, time_grid, drive)
+    prop_sub = full_propagator[6:9, 6:9]
+
+    # Step 5: Target: diag(1, 1, 1, -1)
+    target_gate_diag = torch.diag(torch.tensor([1, 1, 1, -1], dtype=torch.complex128))
+
+    # Step 6: Fidelity (standard Hilbert-Schmidt)
+    N = target_gate_diag.shape[0]
+    fidelity = (1 / N**2) * abs(torch.trace(prop_sub.conj().T @ target_gate_diag)) ** 2
+
+    # Step 7: Unitarity penalty
+    unitarity = 1 - abs(torch.det(prop_sub))
+
+    # Step 8: Combine
+    return abs(1.0 - fidelity.item()) + primal_value + unitarity.item()
+
+
 objective_dictionary: Dict[str, Callable] = {
     "State Preparation": FoM_state_preparation,
     "Gate Transformation": FoM_gate_transformation
