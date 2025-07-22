@@ -19,7 +19,7 @@ pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
         basis_size=3,
-        maximal_pulse=5e6,
+        maximal_pulse=2*np.pi*5e6,
         maximal_amplitude=2e6,
         maximal_frequency=20e6,
         minimal_frequency=0.0,
