@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from evolution import get_propagator
 from typing import Callable, List, Dict
+import math
 
 
 def calculate_primal(pulse, parameter_subset, pulse_settings):
@@ -164,6 +165,54 @@ def FoM_gate_transformation(
 
     # Step 8: Combine
     return abs(1.0 - fidelity.item()) + primal_value + unitarity.item()
+
+
+def FoM_gate_transformation(
+    get_u: Callable,
+    time_grid,
+    parameter_set,
+    pulse_settings_list,
+    target_gate,
+    get_drive_fn
+):
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = np.cumsum([0] + [3 * bs for bs in bss])
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+
+    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
+
+    primal_value = sum(
+        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
+        for i in range(len(drive))
+    )
+
+    full_propagator = get_propagator(get_u, time_grid, drive)
+
+    # Extract 3x3 subspace: rows/cols 6–9 (Python 0-indexed)
+    prop_sub = full_propagator[6:10, 6:10]
+
+    # Custom phase fidelity logic
+    s1 = torch.tensor([1.0] * 8, dtype=prop_sub.dtype) / 8
+    s1 = prop_sub @ s1
+
+    phase = torch.angle(s1)
+    phase_sum1 = phase[0] - phase[1] - phase[2] + phase[3]
+    fid1 = math.cos((abs(phase_sum1.item()) - math.pi) / 4)
+
+    phase_sum2 = (
+        abs(phase[0] - phase[4]) / 2 +
+        abs(phase[1] - phase[5]) +
+        abs(phase[2] - phase[6]) +
+        abs(phase[3] - phase[7])
+    )
+    fid2 = math.cos(phase_sum2 / 4)
+
+    unit_fom = 1 - abs(torch.det(prop_sub))
+    cost = abs(1.0 - (fid1 + fid2) / 2)
+
+    return cost + primal_value + unit_fom
 
 
 objective_dictionary: Dict[str, Callable] = {
