@@ -5,6 +5,12 @@ from typing import Callable, List, Dict
 
 
 def calculate_primal(pulse, parameter_subset, pulse_settings):
+    
+    if isinstance(parameter_subset, np.ndarray):
+        parameter_subset = torch.tensor(parameter_subset, dtype=torch.float64)
+    if isinstance(pulse, np.ndarray):
+        pulse = torch.tensor(pulse, dtype=torch.float64)
+        
     bs = pulse_settings.basis_size
     ma = pulse_settings.maximal_amplitude
     mf = pulse_settings.maximal_frequency
@@ -31,6 +37,14 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
             min(0, torch.min(frequency_parameters).item() - minf) +
             max(0, torch.max(torch.abs(phase_parameters)).item() - mp)
         )
+        
+    if primal > 1.1:
+        print("High primal penalty:")
+        print(f"  max_amp  = {torch.max(torch.abs(amplitude_parameters)).item():.2e} (limit: {ma})")
+        print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
+        print(f"  max_freq = {torch.max(frequency_parameters).item():.2e} (limit: {mf})")
+        print(f"  min_freq = {torch.min(frequency_parameters).item():.2e} (limit: {minf})")
+        print(f"  max_phase = {torch.max(torch.abs(phase_parameters)).item():.2e} (limit: {mp})")
 
     return primal
 
@@ -48,6 +62,9 @@ def FoM_state_preparation(
     target_state,
     get_drive_fn
 ):
+    if isinstance(parameter_set, np.ndarray):
+        parameter_set = torch.tensor(parameter_set, dtype=torch.float64)
+        
     bss = [ps.basis_size for ps in pulse_settings_list]
     indices = np.cumsum([0] + [3 * bs for bs in bss])
 
