@@ -30,7 +30,7 @@ pulse_settings_list = [
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 500
+duration_ns = 1000
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -77,9 +77,9 @@ if objective_type == "State Preparation":
 target_gate = None
 if objective_type == "Gate Transformation":
     # Create diag(1, 1, 1, -1) embedded in bottom-right 4x4 block
-    phase_block = torch.diag(torch.tensor([1, 1, 1, -1], dtype=dtype))
-    target_gate = torch.eye(12, dtype=dtype)
-    target_gate[8:12, 8:12] = phase_block
+    target_gate = torch.diag(torch.tensor([1, 1, 1, -1], dtype=dtype))
+    #target_gate = torch.eye(12, dtype=dtype)
+    #target_gate[8:12, 8:12] = phase_block
 
     goal_fn = get_goal_function(
         get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
@@ -97,7 +97,7 @@ if objective_type == "Gate Transformation":
 # Step 5: Generate initial guess
 # -----------------------------
 x0, f0 = get_initial_guess(
-    sample_size=50,
+    sample_size=2,
     goal_function=goal_fn,
     pulse_settings_list=pulse_settings_list
 )

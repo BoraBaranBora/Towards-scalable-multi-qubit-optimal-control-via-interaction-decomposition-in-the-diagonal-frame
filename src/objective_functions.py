@@ -194,25 +194,17 @@ def FoM_gate_transformation(
     prop_sub = full_propagator[6:10, 6:10]
 
     # Custom phase fidelity logic
-    s1 = torch.tensor([1.0] * 8, dtype=prop_sub.dtype) / 8
+    s1 = torch.tensor([1.0] * 4, dtype=prop_sub.dtype) / 4
     s1 = prop_sub @ s1
 
     phase = torch.angle(s1)
     phase_sum1 = phase[0] - phase[1] - phase[2] + phase[3]
     fid1 = math.cos((abs(phase_sum1.item()) - math.pi) / 4)
 
-    phase_sum2 = (
-        abs(phase[0] - phase[4]) / 2 +
-        abs(phase[1] - phase[5]) +
-        abs(phase[2] - phase[6]) +
-        abs(phase[3] - phase[7])
-    )
-    fid2 = math.cos(phase_sum2 / 4)
-
     unit_fom = 1 - abs(torch.det(prop_sub))
-    cost = abs(1.0 - (fid1 + fid2) / 2)
+    cost = abs(1.0 - (fid1))
 
-    return cost + primal_value + unit_fom
+    return cost + primal_value + unit_fom.item()
 
 
 objective_dictionary: Dict[str, Callable] = {
