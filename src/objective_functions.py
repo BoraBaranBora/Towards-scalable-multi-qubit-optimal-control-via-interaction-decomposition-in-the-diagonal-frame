@@ -108,11 +108,18 @@ def FoM_gate_transformation(
         for i in range(len(drive))
     )
 
-    propagator = get_propagator(get_u, time_grid, drive)[9:12, 9:12]
-    N = target_gate.shape[0]
+    full_propagator = get_propagator(get_u, time_grid, drive)
 
-    fidelity = (1 / N ** 2) * abs(torch.trace(propagator.conj().T @ target_gate)) ** 2
-    unitarity = 1 - abs(torch.det(propagator))
+    # Extract qubit subspace (assumed indices 8 to 11)
+    sub_start = 8
+    sub_end = 12
+    prop_sub = full_propagator[sub_start:sub_end, sub_start:sub_end]
+    gate_sub = target_gate[sub_start:sub_end, sub_start:sub_end]
+
+    N = gate_sub.shape[0]
+
+    fidelity = (1 / N ** 2) * abs(torch.trace(prop_sub.conj().T @ gate_sub)) ** 2
+    unitarity = 1 - abs(torch.det(prop_sub))
 
     return (1 - fidelity.item()) + primal_value + unitarity.item()
 

@@ -20,7 +20,7 @@ pulse_settings_list = [
         basis_type="Custom",
         basis_size=3,
         maximal_pulse=5e6,
-        maximal_amplitude=0.5e6,
+        maximal_amplitude=2e6,
         maximal_frequency=20e6,
         minimal_frequency=0.0,
         maximal_phase=np.pi
@@ -59,18 +59,38 @@ target_index = 6
 # -----------------------------
 # Step 4: Choose objective
 # -----------------------------
-objective_type = "State Preparation"  # or "Gate Transformation"
+objective_type = "Gate Transformation"  # or "Gate Transformation"
 
-goal_fn = get_goal_function(
-    get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),  # wrapped with detuning
-    objective_type=objective_type,
-    time_grid=time_grid,
-    pulse_settings_list=pulse_settings_list,
-    get_drive_fn=get_drive,
-    starting_state=ψ0,
-    target_state=ψ_target,
-    target_gate=None
-)
+if objective_type == "State Preparation":
+    goal_fn = get_goal_function(
+        get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),  # wrapped with detuning
+        objective_type=objective_type,
+        time_grid=time_grid,
+        pulse_settings_list=pulse_settings_list,
+        get_drive_fn=get_drive,
+        starting_state=ψ0,
+        target_state=ψ_target,
+        target_gate=None
+    )
+
+# Define target gate for phase gate objective
+target_gate = None
+if objective_type == "Gate Transformation":
+    # Create diag(1, 1, 1, -1) embedded in bottom-right 4x4 block
+    phase_block = torch.diag(torch.tensor([1, 1, 1, -1], dtype=dtype))
+    target_gate = torch.eye(12, dtype=dtype)
+    target_gate[8:12, 8:12] = phase_block
+
+    goal_fn = get_goal_function(
+        get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+        objective_type=objective_type,
+        time_grid=time_grid,
+        pulse_settings_list=pulse_settings_list,
+        get_drive_fn=get_drive,
+        starting_state=ψ0,
+        target_state=ψ_target,
+        target_gate=target_gate
+    )
 
 
 # -----------------------------
