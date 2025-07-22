@@ -18,7 +18,7 @@ from cma_runner import initialize_cmaes, cmaes_iteration_step
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=3,
+        basis_size=4,
         maximal_pulse=2*np.pi*5e6,
         maximal_amplitude=2e6,
         maximal_frequency=20e6,
@@ -30,7 +30,7 @@ pulse_settings_list = [
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 300
+duration_ns = 500
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -97,7 +97,7 @@ if objective_type == "Gate Transformation":
 # Step 5: Generate initial guess
 # -----------------------------
 x0, f0 = get_initial_guess(
-    sample_size=10,
+    sample_size=50,
     goal_function=goal_fn,
     pulse_settings_list=pulse_settings_list
 )
