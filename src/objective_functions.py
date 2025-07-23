@@ -39,7 +39,7 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
             max(0, torch.max(torch.abs(phase_parameters)).item() - mp)
         )
         
-    if primal > 1e5:
+    if primal > 1e9:
         print("High primal penalty:")
         print(f"  max_amp  = {torch.max(torch.abs(amplitude_parameters)).item():.2e} (limit: {ma})")
         print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
@@ -49,6 +49,63 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
 
     return primal
 
+
+def calculate_primal(pulse, parameter_subset, pulse_settings):
+    if isinstance(parameter_subset, np.ndarray):
+        parameter_subset = torch.tensor(parameter_subset, dtype=torch.float64)
+    if isinstance(pulse, np.ndarray):
+        pulse = torch.tensor(pulse, dtype=torch.float64)
+
+    bs = pulse_settings.basis_size
+    ma = pulse_settings.maximal_amplitude
+    mf = pulse_settings.maximal_frequency
+    minf = pulse_settings.minimal_frequency
+    mp = pulse_settings.maximal_phase
+    mpu = pulse_settings.maximal_pulse
+    basis_type = pulse_settings.basis_type
+
+    amps = parameter_subset[:bs]
+    freqs = parameter_subset[bs:2 * bs]
+    phases = parameter_subset[2 * bs:3 * bs]
+
+    b = 0 if basis_type == "Carrier" else 1
+
+    # Soft quadratic penalty: penalty = (violation / limit)^2
+    def soft_penalty(x, limit):
+        excess = torch.clamp(torch.abs(x) - limit, min=0.0)
+        return (excess / limit) ** 2
+
+    def soft_penalty_raw(x, lower, upper):
+        lower_violation = torch.clamp(lower - x, min=0.0)
+        upper_violation = torch.clamp(x - upper, min=0.0)
+        return ((lower_violation / (upper - lower)) ** 2 +
+                (upper_violation / (upper - lower)) ** 2)
+
+    primal = 0.0
+
+    if b:
+        # Amplitude and pulse soft penalties
+        primal += torch.sum(soft_penalty(amps, ma))
+        primal += soft_penalty(torch.max(torch.abs(pulse)), mpu)
+
+    if basis_type != "QB_Basis":
+        # Frequency soft bounds (min and max)
+        primal += torch.sum(soft_penalty_raw(freqs, minf, mf))
+        # Phase soft penalty
+        primal += torch.sum(soft_penalty(phases, mp))
+
+    # Optional: very weak pulse-end penalty to encourage decay
+    primal += 0.0 * abs(pulse[-1].item())
+
+    if primal > 10.0:  # softer threshold
+        print("High primal penalty (soft):")
+        print(f"  max_amp  = {torch.max(torch.abs(amps)).item():.2e} (limit: {ma})")
+        print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
+        print(f"  max_freq = {torch.max(freqs).item():.2e} (limit: {mf})")
+        print(f"  min_freq = {torch.min(freqs).item():.2e} (limit: {minf})")
+        print(f"  max_phase = {torch.max(torch.abs(phases)).item():.2e} (limit: {mp})")
+
+    return primal.item()
 
 def get_fidelity(current_state, target_state):
     return torch.abs(torch.dot(current_state.conj(), target_state)).item()
@@ -84,7 +141,7 @@ def FoM_state_preparation(
     final_state = propagator @ starting_state
     fidelity = get_fidelity(final_state, target_state)
 
-    return (1 - fidelity) + primal_value
+    return (1 - fidelity) + 1e-3*primal_value
 
 
 def FoM_gate_transformation(
@@ -262,7 +319,7 @@ def FoM_gate_transformation(
     average_excited_population = total_excited_population / len(states)
     excitation_encouragesment = 1.0 - average_excited_population
 
-    return cost + 0.1*primal_value + 0.1*unit_fom.item() + 0.5*excitation_encouragesment
+    return cost + primal_value + unit_fom.item() + 0.5*excitation_encouragesment
 
 objective_dictionary: Dict[str, Callable] = {
     "State Preparation": FoM_state_preparation,
