@@ -73,13 +73,13 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
     # Soft quadratic penalty: penalty = (violation / limit)^2
     def soft_penalty(x, limit):
         excess = torch.clamp(torch.abs(x) - limit, min=0.0)
-        return (excess / limit) ** 2
+        return (excess / limit) ** 3
 
     def soft_penalty_raw(x, lower, upper):
         lower_violation = torch.clamp(lower - x, min=0.0)
         upper_violation = torch.clamp(x - upper, min=0.0)
-        return ((lower_violation / (upper - lower)) ** 2 +
-                (upper_violation / (upper - lower)) ** 2)
+        return ((lower_violation / (upper - lower)) ** 3 +
+                (upper_violation / (upper - lower)) ** 3)
 
     primal = 0.0
 
@@ -97,7 +97,7 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
     # Optional: very weak pulse-end penalty to encourage decay
     primal += 0.0 * abs(pulse[-1].item())
 
-    if primal > 10.0:  # softer threshold
+    if primal > 1000000000000000000.0:  # softer threshold
         print("High primal penalty (soft):")
         print(f"  max_amp  = {torch.max(torch.abs(amps)).item():.2e} (limit: {ma})")
         print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
@@ -301,7 +301,7 @@ def FoM_gate_transformation(
     unit_fom = 1 - abs(torch.det(prop_sub))
     cost = abs(1.0 - fid1)
 
-    # --- NEW: Half-time population reward ---
+    # --- population reward ---
     from evolution import get_evolution_vector
 
     ψ0 = torch.zeros(12, dtype=torch.complex128)
@@ -319,7 +319,8 @@ def FoM_gate_transformation(
     average_excited_population = total_excited_population / len(states)
     excitation_encouragesment = 1.0 - average_excited_population
 
-    return cost + primal_value + unit_fom.item() + 0.5*excitation_encouragesment
+    return cost + primal_value + unit_fom.item() + 0.0*excitation_encouragesment
+
 
 objective_dictionary: Dict[str, Callable] = {
     "State Preparation": FoM_state_preparation,

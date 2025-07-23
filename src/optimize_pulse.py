@@ -21,8 +21,8 @@ pulse_settings_list = [
         basis_size=5,
         maximal_pulse=2*np.pi*5e6,
         maximal_amplitude=2*np.pi*1e6,
-        maximal_frequency=5e6*2*np.pi,
-        minimal_frequency=-5e6*2*np.pi,
+        maximal_frequency=2e6*2*np.pi,
+        minimal_frequency=-2e6*2*np.pi,
         maximal_phase=20*np.pi
     )
 ]
@@ -60,7 +60,7 @@ target_index = 6
 # -----------------------------
 # Step 4: Choose objective
 # -----------------------------
-objective_type = "State Preparation"  # or "Gate Transformation"
+objective_type = "Gate Transformation"  # or "Gate Transformation"
 
 if objective_type == "State Preparation":
     goal_fn = get_goal_function(
@@ -135,7 +135,7 @@ def generate_custom_initial_guess(pulse_settings_list):
 # Step 6: Run optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or   "Nelder Mead"
-iterations = 50
+iterations = 25
 superiterations = 1
 log = True
 verbose = True
