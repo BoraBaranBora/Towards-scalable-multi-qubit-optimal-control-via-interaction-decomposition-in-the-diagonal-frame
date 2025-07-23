@@ -319,7 +319,7 @@ def FoM_gate_transformation(
     average_excited_population = total_excited_population / len(states)
     excitation_encouragesment = 1.0 - average_excited_population
 
-    return cost + primal_value + unit_fom.item() + 0.0*excitation_encouragesment
+    return cost + primal_value + unit_fom.item() + excitation_encouragesment
 
 
 objective_dictionary: Dict[str, Callable] = {

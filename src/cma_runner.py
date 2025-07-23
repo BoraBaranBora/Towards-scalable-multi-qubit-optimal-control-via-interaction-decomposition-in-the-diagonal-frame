@@ -24,6 +24,7 @@ def unnormalize_params(norm_params, scale):
 
 
 
+
 def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     """
     Initialize CMA-ES optimizer.
@@ -46,7 +47,6 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     solutions = [unnormalize_params(x, scale) for x in solutions_norm]
     values = [f(x) for x in solutions]
     return es, solutions_norm, values, scale
-
 
 
 def get_bounds_from_pulse_settings(pulse_settings_list):
@@ -103,6 +103,10 @@ def cmaes_iteration_step(f, es, solutions_norm, values, scale):
         - Updated (es, solutions, values)
     """
     es.tell(solutions_norm, values)
+        # Clamp step size if it grows too large
+    MAX_SIGMA = 0.2
+    if es.sigma > MAX_SIGMA:
+        es.sigma = MAX_SIGMA
     new_solutions_norm = es.ask()
     new_solutions = [unnormalize_params(x, scale) for x in new_solutions_norm]
     new_values = [f(x) for x in new_solutions]

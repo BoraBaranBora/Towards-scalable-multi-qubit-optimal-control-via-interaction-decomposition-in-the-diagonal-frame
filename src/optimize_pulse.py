@@ -60,7 +60,7 @@ target_index = 6
 # -----------------------------
 # Step 4: Choose objective
 # -----------------------------
-objective_type = "Gate Transformation"  # or "Gate Transformation"
+objective_type = "State Preparation"  # or "Gate Transformation"
 
 if objective_type == "State Preparation":
     goal_fn = get_goal_function(
@@ -123,8 +123,8 @@ def generate_custom_initial_guess(pulse_settings_list):
 
     return np.array(pulse_params, dtype=np.float64)
 
-#x0 = generate_custom_initial_guess(pulse_settings_list)
-#f0 = goal_fn(x0)
+x0 = generate_custom_initial_guess(pulse_settings_list)
+f0 = goal_fn(x0)
 
 #print(f'custom x0:{x0}')
 #print(f"Custom initial guess FoM: {f0:.6e}")
@@ -142,7 +142,7 @@ verbose = True
 
 if algo_type == "CMA-ES":
     #es, solutions, values = initialize_cmaes(goal_fn, x0, sigma_init=10)
-    es, solutions_norm, values, scale = initialize_cmaes(goal_fn, x0, pulse_settings_list, sigma_init=0.01)
+    es, solutions_norm, values, scale = initialize_cmaes(goal_fn, x0, pulse_settings_list, sigma_init=0.001)
 
     for i in range(superiterations):
         for j in range(iterations):
