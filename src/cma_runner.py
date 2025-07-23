@@ -2,35 +2,6 @@ import cma
 import numpy as np
 
 
-def initialize_cmaes(f, parameter_set, sigma_init=0.1):
-    """
-    Initialize CMA-ES optimizer.
-    Returns:
-        - es: CMAEvolutionStrategy object
-        - solutions: list of sampled candidates
-        - values: their FoM evaluations
-    """
-    es = cma.CMAEvolutionStrategy(parameter_set.tolist(), sigma_init, {'verb_log': 0, 'verbose': -9})
-    solutions = es.ask()
-    values = [f(np.array(x)) for x in solutions]
-    return es, solutions, values
-
-
-def cmaes_iteration_step(f, es, solutions, values):
-    """
-    Perform one CMA-ES step:
-        - Tell optimizer current solutions and values
-        - Ask for new solutions
-        - Evaluate them
-    Returns:
-        - Updated (es, solutions, values)
-    """
-    es.tell(solutions, values)
-    solutions = es.ask()
-    values = [f(np.array(x)) for x in solutions]
-    return es, solutions, values
-
-
 def get_scaling_from_pulse_settings(pulse_settings_list):
     scale_factors = []
 
@@ -53,6 +24,13 @@ def unnormalize_params(norm_params, scale):
 
 
 def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
+    """
+    Initialize CMA-ES optimizer.
+    Returns:
+        - es: CMAEvolutionStrategy object
+        - solutions: list of sampled candidates
+        - values: their FoM evaluations
+    """
     scale = get_scaling_from_pulse_settings(pulse_settings_list)
     x0_norm = normalize_params(parameter_set, scale)
 
@@ -66,12 +44,20 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     solutions_norm = es.ask()
     solutions = [unnormalize_params(x, scale) for x in solutions_norm]
     values = [f(x) for x in solutions]
-    return es, solutions_norm, values, scale
+    return es, solutions, values, scale
 
 
 def cmaes_iteration_step(f, es, solutions_norm, values, scale):
+    """
+    Perform one CMA-ES step:
+        - Tell optimizer current solutions and values
+        - Ask for new solutions
+        - Evaluate them
+    Returns:
+        - Updated (es, solutions, values)
+    """
     es.tell(solutions_norm, values)
     new_solutions_norm = es.ask()
     new_solutions = [unnormalize_params(x, scale) for x in new_solutions_norm]
     new_values = [f(x) for x in new_solutions]
-    return es, new_solutions_norm, new_values
+    return es, new_solutions, new_values
