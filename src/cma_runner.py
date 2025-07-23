@@ -23,6 +23,28 @@ def unnormalize_params(norm_params, scale):
     return np.array(norm_params) * scale
 
 
+def get_bounds_from_pulse_settings(pulse_settings_list):
+    lower_bounds = []
+    upper_bounds = []
+
+    for ps in pulse_settings_list:
+        bs = ps.basis_size
+
+        # Amplitudes
+        lower_bounds += [0.0] * bs
+        upper_bounds += [ps.maximal_amplitude] * bs
+
+        # Frequencies
+        lower_bounds += [ps.minimal_frequency] * bs
+        upper_bounds += [ps.maximal_frequency] * bs
+
+        # Phases
+        lower_bounds += [-ps.maximal_phase] * bs
+        upper_bounds += [ps.maximal_phase] * bs
+
+    return np.array(lower_bounds), np.array(upper_bounds)
+
+
 def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     """
     Initialize CMA-ES optimizer.
@@ -45,6 +67,29 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     solutions = [unnormalize_params(x, scale) for x in solutions_norm]
     values = [f(x) for x in solutions]
     return es, solutions, values, scale
+
+
+def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
+    scale = get_scaling_from_pulse_settings(pulse_settings_list)
+    x0_norm = normalize_params(parameter_set, scale)
+
+    # Get bounds and normalize them
+    lower_bounds, upper_bounds = get_bounds_from_pulse_settings(pulse_settings_list)
+    lower_bounds_norm = normalize_params(lower_bounds, scale)
+    upper_bounds_norm = normalize_params(upper_bounds, scale)
+
+    options = {
+        'verb_log': 0,
+        'verbose': -9,
+        'CMA_stds': np.ones_like(scale),
+        'bounds': [lower_bounds_norm.tolist(), upper_bounds_norm.tolist()]
+    }
+
+    es = cma.CMAEvolutionStrategy(x0_norm.tolist(), sigma_init, options)
+    solutions_norm = es.ask()
+    solutions = [unnormalize_params(x, scale) for x in solutions_norm]
+    values = [f(x) for x in solutions]
+    return es, solutions_norm, values, scale
 
 
 def cmaes_iteration_step(f, es, solutions_norm, values, scale):
