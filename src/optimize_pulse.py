@@ -9,7 +9,7 @@ from evolution import get_time_grid
 from quantum_model import get_U
 
 from nelder_mead import call_initialization as nm_init, call_algo_step as nm_step
-from cma_runner import initialize_cmaes, cmaes_iteration_step
+from cma_runner import initialize_cmaes, cmaes_iteration_step, get_scaling_from_pulse_settings, unnormalize_params
 
 
 # -----------------------------
@@ -142,16 +142,16 @@ verbose = True
 
 if algo_type == "CMA-ES":
     #es, solutions, values = initialize_cmaes(goal_fn, x0, sigma_init=10)
-    es, solutions, values, scale = initialize_cmaes(goal_fn, x0, pulse_settings_list, sigma_init=0.01)
+    es, solutions_norm, values, scale = initialize_cmaes(goal_fn, x0, pulse_settings_list, sigma_init=0.01)
 
     for i in range(superiterations):
         for j in range(iterations):
             #es, solutions, values = cmaes_iteration_step(goal_fn, es, solutions, values)
-            es, solutions, values = cmaes_iteration_step(goal_fn, es, solutions, values, scale)
+            es, solutions_norm, values = cmaes_iteration_step(goal_fn, es, solutions_norm, values, scale)
 
             best_idx = int(np.argmin(values))
             best_value = values[best_idx]
-            best_params = solutions[best_idx]
+            best_params = solutions_norm[best_idx]
 
             if verbose:
                 print(f"CMA-ES Iteration {j+1}/{iterations}: FoM = {best_value:.6e}")
@@ -159,7 +159,8 @@ if algo_type == "CMA-ES":
                 with open("fom_log.txt", "a") as f:
                     f.write(f"{i},{j},{best_value}\n")
 
-    x_opt = torch.tensor(best_params, dtype=torch.float64)
+    scale = get_scaling_from_pulse_settings(pulse_settings_list)
+    x_opt = torch.tensor(unnormalize_params(best_params,scale), dtype=torch.float64)
     f_opt = best_value
 
 elif algo_type == "Nelder Mead":

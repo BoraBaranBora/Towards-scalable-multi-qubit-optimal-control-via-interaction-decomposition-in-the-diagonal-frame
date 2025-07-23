@@ -23,6 +23,32 @@ def unnormalize_params(norm_params, scale):
     return np.array(norm_params) * scale
 
 
+
+def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
+    """
+    Initialize CMA-ES optimizer.
+    Returns:
+        - es: CMAEvolutionStrategy object
+        - solutions: list of sampled candidates
+        - values: their FoM evaluations
+    """
+    scale = get_scaling_from_pulse_settings(pulse_settings_list)
+    x0_norm = normalize_params(parameter_set, scale)
+
+    options = {
+        'verb_log': 0,
+        'verbose': -9,
+        'CMA_stds': np.ones_like(scale)
+    }
+
+    es = cma.CMAEvolutionStrategy(x0_norm.tolist(), sigma_init, options)
+    solutions_norm = es.ask()
+    solutions = [unnormalize_params(x, scale) for x in solutions_norm]
+    values = [f(x) for x in solutions]
+    return es, solutions_norm, values, scale
+
+
+
 def get_bounds_from_pulse_settings(pulse_settings_list):
     lower_bounds = []
     upper_bounds = []
@@ -46,30 +72,6 @@ def get_bounds_from_pulse_settings(pulse_settings_list):
 
 
 def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
-    """
-    Initialize CMA-ES optimizer.
-    Returns:
-        - es: CMAEvolutionStrategy object
-        - solutions: list of sampled candidates
-        - values: their FoM evaluations
-    """
-    scale = get_scaling_from_pulse_settings(pulse_settings_list)
-    x0_norm = normalize_params(parameter_set, scale)
-
-    options = {
-        'verb_log': 0,
-        'verbose': -9,
-        'CMA_stds': np.ones_like(scale)
-    }
-
-    es = cma.CMAEvolutionStrategy(x0_norm.tolist(), sigma_init, options)
-    solutions_norm = es.ask()
-    solutions = [unnormalize_params(x, scale) for x in solutions_norm]
-    values = [f(x) for x in solutions]
-    return es, solutions, values, scale
-
-
-def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     scale = get_scaling_from_pulse_settings(pulse_settings_list)
     x0_norm = normalize_params(parameter_set, scale)
 
@@ -90,7 +92,6 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     solutions = [unnormalize_params(x, scale) for x in solutions_norm]
     values = [f(x) for x in solutions]
     return es, solutions_norm, values, scale
-
 
 def cmaes_iteration_step(f, es, solutions_norm, values, scale):
     """
