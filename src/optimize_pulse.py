@@ -18,19 +18,20 @@ from cma_runner import initialize_cmaes, cmaes_iteration_step
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=4,
+        basis_size=5,
         maximal_pulse=2*np.pi*5e6,
-        maximal_amplitude=2e6,
-        maximal_frequency=20e6,
-        minimal_frequency=0.0,
-        maximal_phase=np.pi
+        maximal_amplitude=2*np.pi*1e6,
+        maximal_frequency=5e6*2*np.pi,
+        minimal_frequency=-5e6*2*np.pi,
+        maximal_phase=20*np.pi
     )
 ]
+
 
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 1000
+duration_ns = 300
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -59,7 +60,7 @@ target_index = 6
 # -----------------------------
 # Step 4: Choose objective
 # -----------------------------
-objective_type = "Gate Transformation"  # or "Gate Transformation"
+objective_type = "State Preparation"  # or "Gate Transformation"
 
 if objective_type == "State Preparation":
     goal_fn = get_goal_function(
@@ -97,28 +98,57 @@ if objective_type == "Gate Transformation":
 # Step 5: Generate initial guess
 # -----------------------------
 x0, f0 = get_initial_guess(
-    sample_size=2,
+    sample_size=10,
     goal_function=goal_fn,
     pulse_settings_list=pulse_settings_list
 )
-
 print(f"Initial guess FoM: {f0:.6e}")
+
+
+def generate_custom_initial_guess(pulse_settings_list):
+    pulse_params = []
+    for ps in pulse_settings_list:
+        bs = ps.basis_size
+
+        # --- Define parameter groups ---
+        amps = [0.8 * ps.maximal_amplitude] + [0.01] * (bs - 1)
+        freqs = [1e3] * bs
+        phases = [0.0] + [0.1 * ps.maximal_phase] * (bs - 1)
+
+        # Wrap all phases safely
+        phases = [p % (2 * np.pi) for p in phases]
+
+        # Concatenate in correct order: amp | freq | phase
+        pulse_params.extend(amps + freqs + phases)
+
+    return np.array(pulse_params, dtype=np.float64)
+
+#x0 = generate_custom_initial_guess(pulse_settings_list)
+#f0 = goal_fn(x0)
+
+#print(f'custom x0:{x0}')
+#print(f"Custom initial guess FoM: {f0:.6e}")
+
+
 
 # -----------------------------
 # Step 6: Run optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or   "Nelder Mead"
-iterations = 100
+iterations = 50
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
-    es, solutions, values = initialize_cmaes(goal_fn, x0)
+    #es, solutions, values = initialize_cmaes(goal_fn, x0, sigma_init=10)
+    es, solutions, values, scale = initialize_cmaes(goal_fn, x0, pulse_settings_list, sigma_init=0.01)
 
     for i in range(superiterations):
         for j in range(iterations):
-            es, solutions, values = cmaes_iteration_step(goal_fn, es, solutions, values)
+            #es, solutions, values = cmaes_iteration_step(goal_fn, es, solutions, values)
+            es, solutions, values = cmaes_iteration_step(goal_fn, es, solutions, values, scale)
+
             best_idx = int(np.argmin(values))
             best_value = values[best_idx]
             best_params = solutions[best_idx]
@@ -167,3 +197,52 @@ print("Best parameters:", x_opt.numpy())
 np.savetxt("best_params.txt", x_opt.numpy())
 with open("best_fom.txt", "w") as f:
     f.write(str(f_opt))
+
+
+
+import matplotlib.pyplot as plt
+from evolution import get_evolution_vector
+
+# Get optimized drive
+optimized_drive = get_drive(time_grid, x_opt, pulse_settings_list)
+
+# Plot the drive(s)
+plt.figure(figsize=(10, 4))
+for i, d in enumerate(optimized_drive):
+    plt.plot(time_grid.numpy() * 1e9, d.numpy(), label=f"Drive {i+1}")
+plt.xlabel("Time (ns)")
+plt.ylabel("Drive Amplitude")
+plt.title("Optimized Control Drive")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("optimized_drive.png")
+plt.show()
+
+
+# Simulate evolution with optimized parameters
+ψ0 = torch.zeros(12, dtype=dtype)
+ψ0[initial_index] = 1.0
+
+states = get_evolution_vector(
+    lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+    time_grid,
+    optimized_drive,
+    ψ0
+)
+
+# Compute population over time
+populations = torch.stack([torch.abs(state) ** 2 for state in states]).numpy()
+
+# Plot population dynamics for selected states
+plt.figure(figsize=(10, 6))
+for i in [initial_index, target_index]:
+    plt.plot(time_grid.numpy() * 1e9, populations[:, i], label=f"Population of state {i}")
+plt.xlabel("Time (ns)")
+plt.ylabel("Population")
+plt.title("Quantum State Population Dynamics")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("population_dynamics.png")
+plt.show()

@@ -39,7 +39,7 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
             max(0, torch.max(torch.abs(phase_parameters)).item() - mp)
         )
         
-    if primal > 1.1:
+    if primal > 1e5:
         print("High primal penalty:")
         print(f"  max_amp  = {torch.max(torch.abs(amplitude_parameters)).item():.2e} (limit: {ma})")
         print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
@@ -206,6 +206,63 @@ def FoM_gate_transformation(
 
     return cost + primal_value + unit_fom.item()
 
+
+def FoM_gate_transformation(
+    get_u: Callable,
+    time_grid,
+    parameter_set,
+    pulse_settings_list,
+    target_gate,
+    get_drive_fn
+):
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = np.cumsum([0] + [3 * bs for bs in bss])
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+
+    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
+
+    primal_value = sum(
+        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
+        for i in range(len(drive))
+    )
+
+    full_propagator = get_propagator(get_u, time_grid, drive)
+
+    # Extract 4x4 subspace: indices 6–9
+    prop_sub = full_propagator[6:10, 6:10]
+
+    # --- Custom phase fidelity logic ---
+    s1 = torch.tensor([1.0] * 4, dtype=prop_sub.dtype) / 4
+    s1 = prop_sub @ s1
+
+    phase = torch.angle(s1)
+    phase_sum1 = phase[0] - phase[1] - phase[2] + phase[3]
+    fid1 = math.cos((abs(phase_sum1.item()) - math.pi) / 4)
+
+    unit_fom = 1 - abs(torch.det(prop_sub))
+    cost = abs(1.0 - fid1)
+
+    # --- NEW: Half-time population reward ---
+    from evolution import get_evolution_vector
+
+    ψ0 = torch.zeros(12, dtype=torch.complex128)
+    ψ0[0] = 1.0  # assumes lower state is |0⟩
+
+    # Propagate with current drive
+    states = get_evolution_vector(get_u, time_grid, drive, ψ0)
+
+    excited_indices =list(range(6,12))
+    total_excited_population = sum(
+        sum(torch.abs(ψ[i])**2 for i in excited_indices).item()
+        for ψ in states
+    )
+
+    average_excited_population = total_excited_population / len(states)
+    excitation_encouragesment = 1.0 - average_excited_population
+
+    return cost + 0.1*primal_value + 0.1*unit_fom.item() + 0.5*excitation_encouragesment
 
 objective_dictionary: Dict[str, Callable] = {
     "State Preparation": FoM_state_preparation,
