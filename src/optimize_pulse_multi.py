@@ -23,7 +23,7 @@ from nelder_mead import call_initialization as nm_init, call_algo_step as nm_ste
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=5,
+        basis_size=8,
         maximal_pulse=2*np.pi * 5e6,
         maximal_amplitude=(1/4) * 2*np.pi * 5e6,
         maximal_frequency=20e6 * 2 * np.pi,
@@ -35,7 +35,7 @@ pulse_settings_list = [
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 150
+duration_ns = 200
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -46,7 +46,7 @@ time_grid = get_time_grid(duration_ns, steps_per_ns)
     0: Λ00, 1: Λ01, 2: Λ00, 3: Λ01, 4: Λ00, 5: Λ01,
     6: Λ10, 7: Λ11, 8: Λ10, 9: Λ11, 10: Λ10, 11: Λ11
 }
-initial_target_pairs = [(0, 6)]#, (1, 7), (2, 8), (3, 9)]
+initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
 # Use the first pair to compute global Δ
 Δ = (Λ_dict[initial_target_pairs[0][1]] - Λ_s).item()
 
@@ -79,18 +79,20 @@ print(f"Initial guess FoM: {f0:.6e}")
 # f0 = goal_fn(x0)
 # print(f"Custom initial guess FoM: {f0:.6e}")
 
+
+
 # -----------------------------
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 1000
+iterations = 250
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=1.0
+        goal_fn, x0, pulse_settings_list, sigma_init=0.25
     )
     for _ in range(superiterations):
         for j in range(iterations):
