@@ -84,7 +84,7 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
         'verb_log': 0,
         'verbose': -9,
         'CMA_stds': np.ones_like(scale),
-        'bounds': [lower_bounds_norm.tolist(), upper_bounds_norm.tolist()],
+        #'bounds': [lower_bounds_norm.tolist(), upper_bounds_norm.tolist()],
         #'tolupsigma':1e-3
 
     }
