@@ -144,6 +144,78 @@ def FoM_state_preparation(
     return (1 - fidelity) + 1e-3*primal_value
 
 
+from typing import Callable, List
+
+def FoM_multi_state_preparation(
+    get_u: Callable,
+    time_grid,
+    parameter_set,
+    pulse_settings_list,
+    initial_target_pairs: List[tuple],
+    get_drive_fn: Callable
+):
+    # Convert parameter_set to torch if needed
+    if isinstance(parameter_set, np.ndarray):
+        parameter_set = torch.tensor(parameter_set, dtype=torch.float64)
+    
+    # Split parameters by pulse setting
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = np.cumsum([0] + [3 * bs for bs in bss])
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+    
+    # Generate control pulses
+    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
+
+    # Primal regularization term
+    primal_value = sum(
+        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
+        for i in range(len(drive))
+    )
+
+    # Get full propagator
+    propagator = get_propagator(get_u, time_grid, drive)
+
+    # Define active subspace projection
+    active_indices = [0, 1, 2, 3, 6, 7, 8, 9]
+    proj = torch.zeros(len(active_indices), 12, dtype=parameter_set.dtype)
+    for i, idx in enumerate(active_indices):
+        proj[i, idx] = 1.0
+
+    # Accumulate total infidelity
+    total_infidelity = 0.0
+
+    for init_idx, target_idx in initial_target_pairs:
+        # Prepare initial and target states
+        ψ0 = torch.zeros(12, dtype=parameter_set.dtype)
+        ψ0[init_idx] = 1.0
+
+        ψ_target = torch.zeros(12, dtype=parameter_set.dtype)
+        ψ_target[target_idx] = 1.0
+
+        # Propagate
+        ψ_final = propagator @ ψ0
+
+        # Project both states into computational subspace
+        ψ_proj = proj @ ψ_final
+        ψ_target_proj = proj @ ψ_target
+
+        # Normalize
+        ψ_proj /= torch.norm(ψ_proj)
+        ψ_target_proj /= torch.norm(ψ_target_proj)
+
+        # Compute fidelity
+        fidelity = torch.abs(torch.dot(ψ_proj.conj(), ψ_target_proj))**2
+        total_infidelity += (1 - fidelity)
+
+    # Average infidelity over all transitions
+    avg_infidelity = total_infidelity / len(initial_target_pairs)
+
+    # Return cost with regularization
+    return avg_infidelity + 1e-3 * primal_value
+
+
 def FoM_gate_transformation(
     get_u: Callable,
     time_grid,
