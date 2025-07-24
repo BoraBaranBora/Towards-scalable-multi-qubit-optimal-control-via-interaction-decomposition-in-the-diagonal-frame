@@ -14,6 +14,8 @@ from cma_runner import (
     get_scaling_from_pulse_settings,
     unnormalize_params
 )
+from nelder_mead import call_initialization as nm_init, call_algo_step as nm_step
+
 
 # -----------------------------
 # Step 1: Define pulse settings
@@ -21,9 +23,9 @@ from cma_runner import (
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=8,
-        maximal_pulse=1 * np.pi * 5e6,
-        maximal_amplitude=(1/3) * np.pi * 5e6,
+        basis_size=5,
+        maximal_pulse=2*np.pi * 5e6,
+        maximal_amplitude=(1/4) * 2*np.pi * 5e6,
         maximal_frequency=20e6 * 2 * np.pi,
         minimal_frequency=0,
         maximal_phase=100 * np.pi
@@ -33,7 +35,7 @@ pulse_settings_list = [
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 300
+duration_ns = 150
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -64,7 +66,7 @@ goal_fn = get_goal_function(
 # Step 5: Initial guess
 # -----------------------------
 x0, f0 = get_initial_guess(
-    sample_size=3,
+    sample_size=30,
     goal_function=goal_fn,
     pulse_settings_list=pulse_settings_list
 )
@@ -81,7 +83,7 @@ print(f"Initial guess FoM: {f0:.6e}")
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 100
+iterations = 1000
 superiterations = 1
 log = True
 verbose = True
@@ -106,6 +108,30 @@ if algo_type == "CMA-ES":
     best_params = solutions_norm[best_idx]
     x_opt = torch.tensor(unnormalize_params(best_params, scale), dtype=torch.float64)
     f_opt = values[best_idx]
+
+
+elif algo_type == "Nelder Mead":
+    samples, values = nm_init("Nelder Mead", goal_fn, x0)
+
+    for i in range(superiterations):
+        best_idx = int(np.argmin(values))
+        best_guess = samples[best_idx]
+        samples, values = nm_init("Nelder Mead", goal_fn, best_guess)
+
+        for j in range(iterations):
+            samples, values = nm_step("Nelder Mead", goal_fn, samples, values)
+            best_idx = int(np.argmin(values))
+            best_value = values[best_idx]
+
+            if verbose:
+                print(f"NM Iteration {j+1}/{iterations}: FoM = {best_value:.6e}")
+            if log:
+                with open("fom_log.txt", "a") as f:
+                    f.write(f"{i},{j},{best_value}\n")
+
+    x_opt = torch.tensor(samples[best_idx], dtype=torch.float64)
+    f_opt = values[best_idx]
+
 else:
     raise ValueError(f"Unsupported algorithm: {algo_type}")
 

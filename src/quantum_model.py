@@ -202,7 +202,7 @@ factor = 1.0
 
 def get_U(Ω, dt, t, Δ=0.0):
     # Control fields
-    Ω_e = factor * torch.cos((Λ_s + Δ) * t) * (2.0*math.pi*5e6 +Ω[0]) / γ_e
+    Ω_e = factor * torch.cos((Λ_s + Δ) * t) * (Ω[0]) / γ_e #2.0*math.pi*5e6 
     Ω_x = 0#Ω_e * (γ_e / γ2)
 
     # Diagonal modulation

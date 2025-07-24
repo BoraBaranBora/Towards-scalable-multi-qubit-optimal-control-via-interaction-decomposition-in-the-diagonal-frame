@@ -95,6 +95,7 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
 
 
 
+
 def cmaes_iteration_step(f, es, solutions_norm, values, scale):
     """
     Perform one CMA-ES step:
@@ -113,6 +114,7 @@ def cmaes_iteration_step(f, es, solutions_norm, values, scale):
     new_solutions = [unnormalize_params(x, scale) for x in new_solutions_norm]
     new_values = [f(x) for x in new_solutions]
     return es, new_solutions, new_values
+
 
 
 def cmaes_iteration_step(f, es, solutions_norm, values, scale):

@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def get_simplex(parameter_set, spread=0.04):
+def get_simplex(parameter_set, spread=0.1):
     """Generate a simplex around the given parameter set."""
     d_n = len(parameter_set)
     unit_vectors = np.eye(d_n)
