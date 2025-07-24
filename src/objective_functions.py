@@ -8,6 +8,7 @@ from evolution import get_propagator
 # --- Constraint Penalty ---
 # -------------------------
 
+
 def calculate_primal(pulse, parameter_subset, pulse_settings):
     if isinstance(parameter_subset, np.ndarray):
         parameter_subset = torch.tensor(parameter_subset, dtype=torch.float64)
@@ -30,25 +31,38 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
 
     def soft_penalty(x, limit):
         excess = torch.clamp(torch.abs(x) - limit, min=0.0)
-        return (excess / limit) ** 3
+        return (excess / limit) ** 2  # softer and smoother
 
     def soft_penalty_raw(x, lower, upper):
         lower_violation = torch.clamp(lower - x, min=0.0)
         upper_violation = torch.clamp(x - upper, min=0.0)
-        return ((lower_violation / (upper - lower)) ** 3 +
-                (upper_violation / (upper - lower)) ** 3)
+        return ((lower_violation / (upper - lower)) ** 2 +
+                (upper_violation / (upper - lower)) ** 2)
 
-    primal = 0.0
+    total_penalty = 0.0
+    total_terms = 0
+
     if b:
-        primal += torch.sum(soft_penalty(amps, ma))
-        primal += soft_penalty(torch.max(torch.abs(pulse)), mpu)
+        total_penalty += torch.sum(soft_penalty(amps, ma))
+        total_terms += len(amps)
+
+        total_penalty += soft_penalty(torch.max(torch.abs(pulse)), mpu)
+        total_terms += 1
 
     if basis_type != "QB_Basis":
-        primal += torch.sum(soft_penalty_raw(freqs, minf, mf))
-        primal += torch.sum(soft_penalty(phases, mp))
+        total_penalty += torch.sum(soft_penalty_raw(freqs, minf, mf))
+        total_terms += len(freqs)
 
-    return primal.item()
+        total_penalty += torch.sum(soft_penalty(phases, mp))
+        total_terms += len(phases)
 
+    # --- Normalize total penalty ---
+    if total_terms > 0:
+        normalized_primal = total_penalty / total_terms
+    else:
+        normalized_primal = torch.tensor(0.0)
+
+    return normalized_primal.item()
 
 # --------------------------
 # --- Fidelity Utilities ---
@@ -149,7 +163,7 @@ def FoM_multi_state_preparation(
         total_infidelity += (1 - fidelity)
 
     avg_infidelity = total_infidelity / len(initial_target_pairs)
-    return avg_infidelity + 1e-3 * primal_value
+    return avg_infidelity + primal_value
 
 
 # -------------------------
