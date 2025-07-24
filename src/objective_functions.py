@@ -365,6 +365,7 @@ def FoM_gate_transformation(
 
     # Extract 4x4 subspace: indices 6–9
     prop_sub = full_propagator[6:10, 6:10]
+ #   print(prop_sub)
     # --- Custom phase fidelity logic ---
     s1 = torch.tensor([1.0] * 4, dtype=prop_sub.dtype) / 1 #4
     
@@ -396,7 +397,7 @@ def FoM_gate_transformation(
     average_excited_population = total_excited_population / len(states)
     excitation_encouragesment = 1.0 - average_excited_population
 
-    return cost + primal_value + unit_fom.item() + 0*excitation_encouragesment
+    return cost + primal_value + unit_fom.item() + excitation_encouragesment
 
 
 objective_dictionary: Dict[str, Callable] = {
