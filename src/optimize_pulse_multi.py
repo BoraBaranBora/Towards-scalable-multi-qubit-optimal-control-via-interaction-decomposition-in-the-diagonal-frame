@@ -26,16 +26,16 @@ pulse_settings_list = [
         basis_size=8,
         maximal_pulse=2*np.pi * 5e6,
         maximal_amplitude=(1/4) * 2*np.pi * 5e6,
-        maximal_frequency=20e6 * 2 * np.pi,
+        maximal_frequency=10e6 * 2 * np.pi,
         minimal_frequency=0,
-        maximal_phase=100 * np.pi
+        maximal_phase=1 * np.pi
     )
 ]
 
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 200
+duration_ns = 350
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -85,7 +85,7 @@ print(f"Initial guess FoM: {f0:.6e}")
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 250
+iterations = 50
 superiterations = 1
 log = True
 verbose = True
