@@ -55,6 +55,8 @@ target_index = 6
 
 Δ = (Λ_dict[target_index] - Λ_s).item()
 
+# Example: 0 → 6, 1 → 7, 2 → 8, 3 → 9
+initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
 
 # -----------------------------
 # Step 4: Choose objective
@@ -91,6 +93,22 @@ if objective_type == "Gate Transformation":
         target_state=ψ_target,
         target_gate=target_gate
     )
+
+# -----------------------------
+# Step 4: Choose objective
+# -----------------------------
+objective_type = "Multi-State Preparation"  # <- change to use your new function
+
+goal_fn = get_goal_function(
+    get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+    objective_type=objective_type,
+    time_grid=time_grid,
+    pulse_settings_list=pulse_settings_list,
+    get_drive_fn=get_drive,
+    initial_target_pairs=initial_target_pairs  # <- pass the pair list
+)
+
+    
 
 
 # -----------------------------
@@ -246,3 +264,17 @@ plt.grid(True)
 plt.tight_layout()
 plt.savefig("population_dynamics.png")
 plt.show()
+
+for init_idx, tgt_idx in initial_target_pairs:
+    ψ0 = torch.zeros(12, dtype=dtype)
+    ψ0[init_idx] = 1.0
+
+    states = get_evolution_vector(
+        lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+        time_grid,
+        optimized_drive,
+        ψ0
+    )
+    populations = torch.stack([torch.abs(state) ** 2 for state in states]).numpy()
+
+    plt.plot(time_grid.numpy() * 1e9, populations[:, tgt_idx], label=f"{init_idx} → {tgt_idx}")
