@@ -138,12 +138,6 @@ def FoM_multi_state_preparation(
 
     propagator = get_propagator(get_u, time_grid, drive)
 
-    # Define subspace projection
-    active_indices = [0, 1, 2, 3, 6, 7, 8, 9]
-    proj = torch.zeros(len(active_indices), 12, dtype=torch.complex128)
-    for i, idx in enumerate(active_indices):
-        proj[i, idx] = 1.0
-
     total_infidelity = 0.0
     for init_idx, target_idx in initial_target_pairs:
         ψ0 = torch.zeros(12, dtype=torch.complex128)
@@ -153,18 +147,12 @@ def FoM_multi_state_preparation(
         ψ_target[target_idx] = 1.0
 
         ψ_final = propagator @ ψ0
-        ψ_proj = proj @ ψ_final
-        ψ_target_proj = proj @ ψ_target
 
-        ψ_proj /= torch.norm(ψ_proj)
-        ψ_target_proj /= torch.norm(ψ_target_proj)
-
-        fidelity = torch.abs(torch.dot(ψ_proj.conj(), ψ_target_proj)) ** 2
+        fidelity = torch.abs(torch.dot(ψ_final.conj(), ψ_target)) ** 2
         total_infidelity += (1 - fidelity)
 
     avg_infidelity = total_infidelity / len(initial_target_pairs)
-    return avg_infidelity + 1e-2*primal_value
-
+    return avg_infidelity + 1e-2 * primal_value
 
 # -------------------------
 # --- Gate Transformation ---
