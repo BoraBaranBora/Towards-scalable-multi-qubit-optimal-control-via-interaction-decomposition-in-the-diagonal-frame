@@ -18,15 +18,14 @@ from cma_runner import initialize_cmaes, cmaes_iteration_step, get_scaling_from_
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=5,
-        maximal_pulse=2*np.pi*5e6,
-        maximal_amplitude=2*np.pi*1e6,
-        maximal_frequency=2e6*2*np.pi,
-        minimal_frequency=-2e6*2*np.pi,
-        maximal_phase=20*np.pi
+        basis_size=8,
+        maximal_pulse=1*np.pi*5e6,
+        maximal_amplitude=1/3 *np.pi*5e6,
+        maximal_frequency=20e6*2*np.pi,
+        minimal_frequency=0,#-5e6*2*np.pi,
+        maximal_phase=100*np.pi
     )
 ]
-
 
 # -----------------------------
 # Step 2: Simulation parameters
@@ -60,7 +59,7 @@ target_index = 6
 # -----------------------------
 # Step 4: Choose objective
 # -----------------------------
-objective_type = "State Preparation"  # or "Gate Transformation"
+objective_type = "Gate Transformation"  # or "Gate Transformation"
 
 if objective_type == "State Preparation":
     goal_fn = get_goal_function(
@@ -98,7 +97,7 @@ if objective_type == "Gate Transformation":
 # Step 5: Generate initial guess
 # -----------------------------
 x0, f0 = get_initial_guess(
-    sample_size=10,
+    sample_size=30,
     goal_function=goal_fn,
     pulse_settings_list=pulse_settings_list
 )
@@ -123,8 +122,8 @@ def generate_custom_initial_guess(pulse_settings_list):
 
     return np.array(pulse_params, dtype=np.float64)
 
-x0 = generate_custom_initial_guess(pulse_settings_list)
-f0 = goal_fn(x0)
+#x0 = generate_custom_initial_guess(pulse_settings_list)
+#f0 = goal_fn(x0)
 
 #print(f'custom x0:{x0}')
 #print(f"Custom initial guess FoM: {f0:.6e}")
@@ -135,7 +134,7 @@ f0 = goal_fn(x0)
 # Step 6: Run optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or   "Nelder Mead"
-iterations = 25
+iterations = 100
 superiterations = 1
 log = True
 verbose = True

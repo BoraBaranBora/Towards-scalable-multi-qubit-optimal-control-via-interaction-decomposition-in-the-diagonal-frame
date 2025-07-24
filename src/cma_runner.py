@@ -84,7 +84,7 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
         'verb_log': 0,
         'verbose': -9,
         'CMA_stds': np.ones_like(scale),
-        'bounds': [lower_bounds_norm.tolist(), upper_bounds_norm.tolist()]
+        'bounds': [lower_bounds_norm.tolist(), upper_bounds_norm.tolist()],
     }
 
     es = cma.CMAEvolutionStrategy(x0_norm.tolist(), sigma_init, options)
@@ -92,6 +92,8 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
     solutions = [unnormalize_params(x, scale) for x in solutions_norm]
     values = [f(x) for x in solutions]
     return es, solutions_norm, values, scale
+
+
 
 def cmaes_iteration_step(f, es, solutions_norm, values, scale):
     """
@@ -111,3 +113,31 @@ def cmaes_iteration_step(f, es, solutions_norm, values, scale):
     new_solutions = [unnormalize_params(x, scale) for x in new_solutions_norm]
     new_values = [f(x) for x in new_solutions]
     return es, new_solutions, new_values
+
+
+def cmaes_iteration_step(f, es, solutions_norm, values, scale):
+    try:
+        es.tell(solutions_norm, values)
+    except ValueError as e:
+        print("CMA-ES tell() failed due to invalid solution:", e)
+        print("Trying to clip values into bounds...")
+
+        # Clip solutions_norm into bounds (defensive repair)
+        bounds = es.opts.get('bounds')
+        if bounds is not None:
+            lb, ub = np.array(bounds[0]), np.array(bounds[1])
+            solutions_norm = [np.clip(sol, lb, ub) for sol in solutions_norm]
+            es.tell(solutions_norm, values)
+        else:
+            raise e  # No bounds? Then we can't fix this
+
+    # Optionally clamp step size to avoid runaway
+    #MAX_SIGMA = 0.5
+    #if es.sigma > MAX_SIGMA:
+    #    es.sigma = MAX_SIGMA
+
+    new_solutions_norm = es.ask()
+    new_solutions = [unnormalize_params(x, scale) for x in new_solutions_norm]
+    new_values = [f(x) for x in new_solutions]
+
+    return es, new_solutions_norm, new_values
