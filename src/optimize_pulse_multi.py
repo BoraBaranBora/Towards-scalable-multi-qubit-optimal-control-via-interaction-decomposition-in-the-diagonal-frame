@@ -46,7 +46,7 @@ time_grid = get_time_grid(duration_ns, steps_per_ns)
     0: Λ00, 1: Λ01, 2: Λ00, 3: Λ01, 4: Λ00, 5: Λ01,
     6: Λ10, 7: Λ11, 8: Λ10, 9: Λ11, 10: Λ10, 11: Λ11
 }
-initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+initial_target_pairs = [(0, 6)]#, (1, 7), (2, 8), (3, 9)]
 # Use the first pair to compute global Δ
 Δ = (Λ_dict[initial_target_pairs[0][1]] - Λ_s).item()
 
@@ -90,7 +90,7 @@ verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=0.001
+        goal_fn, x0, pulse_settings_list, sigma_init=1.0
     )
     for _ in range(superiterations):
         for j in range(iterations):

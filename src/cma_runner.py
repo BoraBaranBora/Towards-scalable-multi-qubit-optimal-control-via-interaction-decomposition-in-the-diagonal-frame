@@ -85,6 +85,8 @@ def initialize_cmaes(f, parameter_set, pulse_settings_list, sigma_init=0.1):
         'verbose': -9,
         'CMA_stds': np.ones_like(scale),
         'bounds': [lower_bounds_norm.tolist(), upper_bounds_norm.tolist()],
+        #'tolupsigma':1e-3
+
     }
 
     es = cma.CMAEvolutionStrategy(x0_norm.tolist(), sigma_init, options)
@@ -134,9 +136,9 @@ def cmaes_iteration_step(f, es, solutions_norm, values, scale):
             raise e  # No bounds? Then we can't fix this
 
     # Optionally clamp step size to avoid runaway
-    #MAX_SIGMA = 0.5
-    #if es.sigma > MAX_SIGMA:
-    #    es.sigma = MAX_SIGMA
+    #MIN_SIGMA = 0.01
+    #if es.sigma < MIN_SIGMA:
+    #    es.sigma = MIN_SIGMA
 
     new_solutions_norm = es.ask()
     new_solutions = [unnormalize_params(x, scale) for x in new_solutions_norm]
