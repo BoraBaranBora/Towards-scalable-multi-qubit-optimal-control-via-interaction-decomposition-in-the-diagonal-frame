@@ -149,7 +149,7 @@ def FoM_multi_state_preparation(
         total_infidelity += (1 - fidelity)
 
     avg_infidelity = total_infidelity / len(initial_target_pairs)
-    return avg_infidelity.item() + 1e-3 * primal_value
+    return avg_infidelity + 1e-3 * primal_value
 
 
 # -------------------------
