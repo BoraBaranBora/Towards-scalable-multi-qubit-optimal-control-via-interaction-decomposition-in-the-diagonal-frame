@@ -1,54 +1,12 @@
 import torch
 import numpy as np
-from evolution import get_propagator
-from typing import Callable, List, Dict
 import math
+from typing import Callable, List, Dict
+from evolution import get_propagator
 
-
-def calculate_primal(pulse, parameter_subset, pulse_settings):
-    
-    if isinstance(parameter_subset, np.ndarray):
-        parameter_subset = torch.tensor(parameter_subset, dtype=torch.float64)
-    if isinstance(pulse, np.ndarray):
-        pulse = torch.tensor(pulse, dtype=torch.float64)
-        
-    bs = pulse_settings.basis_size
-    ma = pulse_settings.maximal_amplitude
-    mf = pulse_settings.maximal_frequency
-    minf = pulse_settings.minimal_frequency
-    mp = pulse_settings.maximal_phase
-    mpu = pulse_settings.maximal_pulse
-    basis_type = pulse_settings.basis_type
-
-    amplitude_parameters = parameter_subset[:bs]
-    frequency_parameters = parameter_subset[bs:2 * bs]
-    phase_parameters = parameter_subset[2 * bs:3 * bs]
-
-    b = 0 if basis_type == "Carrier" else 1
-
-    primal = (
-        b * max(0, torch.abs(torch.max(amplitude_parameters)).item() - ma) +
-        b * max(0, torch.max(torch.abs(pulse)).item() - mpu) +
-        0.00 * abs(pulse[-1].item())
-    )
-
-    if basis_type != "QB_Basis":
-        primal += (
-            max(0, torch.max(frequency_parameters).item() - mf) -
-            min(0, torch.min(frequency_parameters).item() - minf) +
-            max(0, torch.max(torch.abs(phase_parameters)).item() - mp)
-        )
-        
-    if primal > 1e9:
-        print("High primal penalty:")
-        print(f"  max_amp  = {torch.max(torch.abs(amplitude_parameters)).item():.2e} (limit: {ma})")
-        print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
-        print(f"  max_freq = {torch.max(frequency_parameters).item():.2e} (limit: {mf})")
-        print(f"  min_freq = {torch.min(frequency_parameters).item():.2e} (limit: {minf})")
-        print(f"  max_phase = {torch.max(torch.abs(phase_parameters)).item():.2e} (limit: {mp})")
-
-    return primal
-
+# -------------------------
+# --- Constraint Penalty ---
+# -------------------------
 
 def calculate_primal(pulse, parameter_subset, pulse_settings):
     if isinstance(parameter_subset, np.ndarray):
@@ -70,7 +28,6 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
 
     b = 0 if basis_type == "Carrier" else 1
 
-    # Soft quadratic penalty: penalty = (violation / limit)^2
     def soft_penalty(x, limit):
         excess = torch.clamp(torch.abs(x) - limit, min=0.0)
         return (excess / limit) ** 3
@@ -82,34 +39,28 @@ def calculate_primal(pulse, parameter_subset, pulse_settings):
                 (upper_violation / (upper - lower)) ** 3)
 
     primal = 0.0
-
     if b:
-        # Amplitude and pulse soft penalties
         primal += torch.sum(soft_penalty(amps, ma))
         primal += soft_penalty(torch.max(torch.abs(pulse)), mpu)
 
     if basis_type != "QB_Basis":
-        # Frequency soft bounds (min and max)
         primal += torch.sum(soft_penalty_raw(freqs, minf, mf))
-        # Phase soft penalty
         primal += torch.sum(soft_penalty(phases, mp))
 
-    # Optional: very weak pulse-end penalty to encourage decay
-    primal += 0.0 * abs(pulse[-1].item())
-
-    if primal > 1000000000000000000.0:  # softer threshold
-        print("High primal penalty (soft):")
-        print(f"  max_amp  = {torch.max(torch.abs(amps)).item():.2e} (limit: {ma})")
-        print(f"  max_pulse = {torch.max(torch.abs(pulse)).item():.2e} (limit: {mpu})")
-        print(f"  max_freq = {torch.max(freqs).item():.2e} (limit: {mf})")
-        print(f"  min_freq = {torch.min(freqs).item():.2e} (limit: {minf})")
-        print(f"  max_phase = {torch.max(torch.abs(phases)).item():.2e} (limit: {mp})")
-
     return primal.item()
+
+
+# --------------------------
+# --- Fidelity Utilities ---
+# --------------------------
 
 def get_fidelity(current_state, target_state):
     return torch.abs(torch.dot(current_state.conj(), target_state)).item()
 
+
+# ---------------------------
+# --- State Preparation ---
+# ---------------------------
 
 def FoM_state_preparation(
     get_u: Callable,
@@ -122,10 +73,9 @@ def FoM_state_preparation(
 ):
     if isinstance(parameter_set, np.ndarray):
         parameter_set = torch.tensor(parameter_set, dtype=torch.float64)
-        
+
     bss = [ps.basis_size for ps in pulse_settings_list]
     indices = np.cumsum([0] + [3 * bs for bs in bss])
-
     parameter_subsets = [
         parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
     ]
@@ -141,10 +91,12 @@ def FoM_state_preparation(
     final_state = propagator @ starting_state
     fidelity = get_fidelity(final_state, target_state)
 
-    return (1 - fidelity) + 1e-3*primal_value
+    return (1 - fidelity) + 1e-3 * primal_value
 
 
-from typing import Callable, List
+# -------------------------------
+# --- Multi-State Preparation ---
+# -------------------------------
 
 def FoM_multi_state_preparation(
     get_u: Callable,
@@ -154,106 +106,55 @@ def FoM_multi_state_preparation(
     initial_target_pairs: List[tuple],
     get_drive_fn: Callable
 ):
-    # Convert parameter_set to torch if needed
     if isinstance(parameter_set, np.ndarray):
         parameter_set = torch.tensor(parameter_set, dtype=torch.float64)
-    
-    # Split parameters by pulse setting
+
     bss = [ps.basis_size for ps in pulse_settings_list]
     indices = np.cumsum([0] + [3 * bs for bs in bss])
     parameter_subsets = [
         parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
     ]
-    
-    # Generate control pulses
+
     drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
 
-    # Primal regularization term
     primal_value = sum(
         calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
         for i in range(len(drive))
     )
 
-    # Get full propagator
     propagator = get_propagator(get_u, time_grid, drive)
 
-    # Define active subspace projection
+    # Define subspace projection
     active_indices = [0, 1, 2, 3, 6, 7, 8, 9]
-    proj = torch.zeros(len(active_indices), 12, dtype=parameter_set.dtype)
+    proj = torch.zeros(len(active_indices), 12, dtype=torch.complex128)
     for i, idx in enumerate(active_indices):
         proj[i, idx] = 1.0
 
-    # Accumulate total infidelity
     total_infidelity = 0.0
-
     for init_idx, target_idx in initial_target_pairs:
-        # Prepare initial and target states
-        ψ0 = torch.zeros(12, dtype=parameter_set.dtype)
+        ψ0 = torch.zeros(12, dtype=torch.complex128)
         ψ0[init_idx] = 1.0
 
-        ψ_target = torch.zeros(12, dtype=parameter_set.dtype)
+        ψ_target = torch.zeros(12, dtype=torch.complex128)
         ψ_target[target_idx] = 1.0
 
-        # Propagate
         ψ_final = propagator @ ψ0
-
-        # Project both states into computational subspace
         ψ_proj = proj @ ψ_final
         ψ_target_proj = proj @ ψ_target
 
-        # Normalize
         ψ_proj /= torch.norm(ψ_proj)
         ψ_target_proj /= torch.norm(ψ_target_proj)
 
-        # Compute fidelity
-        fidelity = torch.abs(torch.dot(ψ_proj.conj(), ψ_target_proj))**2
+        fidelity = torch.abs(torch.dot(ψ_proj.conj(), ψ_target_proj)) ** 2
         total_infidelity += (1 - fidelity)
 
-    # Average infidelity over all transitions
     avg_infidelity = total_infidelity / len(initial_target_pairs)
-
-    # Return cost with regularization
-    return avg_infidelity + 1e-3 * primal_value
+    return avg_infidelity.item() + 1e-3 * primal_value
 
 
-def FoM_gate_transformation(
-    get_u: Callable,
-    time_grid,
-    parameter_set,
-    pulse_settings_list,
-    target_gate,
-    get_drive_fn
-):
-    bss = [ps.basis_size for ps in pulse_settings_list]
-    indices = np.cumsum([0] + [3 * bs for bs in bss])
-
-    parameter_subsets = [
-        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
-    ]
-
-    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
-
-    primal_value = sum(
-        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
-        for i in range(len(drive))
-    )
-
-    full_propagator = get_propagator(get_u, time_grid, drive)
-
-    # Extract qubit subspace (assumed indices 8 to 11)
-    sub_start = 8
-    sub_end = 12
-    prop_sub = full_propagator[sub_start:sub_end, sub_start:sub_end]
-    gate_sub = target_gate[sub_start:sub_end, sub_start:sub_end]
-
-    N = gate_sub.shape[0]
-
-    fidelity = (1 / N ** 2) * abs(torch.trace(prop_sub.conj().T @ gate_sub)) ** 2
-    unitarity = 1 - abs(torch.det(prop_sub))
-
-    return (1 - fidelity.item()) + primal_value + unitarity.item()
-
-
+# -------------------------
+# --- Gate Transformation ---
+# -------------------------
 
 def FoM_gate_transformation(
     get_u: Callable,
@@ -270,7 +171,6 @@ def FoM_gate_transformation(
     ]
 
     drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
-
     primal_value = sum(
         calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
         for i in range(len(drive))
@@ -278,139 +178,30 @@ def FoM_gate_transformation(
 
     full_propagator = get_propagator(get_u, time_grid, drive)
 
-    # Extract 3x3 subspace: rows/cols 6–9 (Python 0-indexed)
     prop_sub = full_propagator[6:10, 6:10]
-
-    # Custom phase fidelity logic
-    s1 = torch.tensor([1.0] * 4, dtype=prop_sub.dtype) / 4
-    s1 = prop_sub @ s1
-
-    phase = torch.angle(s1)
-    phase_sum1 = phase[0] - phase[1] - phase[2] + phase[3]
-    fid1 = math.cos((abs(phase_sum1.item()) - math.pi) / 4)
-
-    unit_fom = 1 - abs(torch.det(prop_sub))
-    cost = abs(1.0 - (fid1))
-
-    return cost + primal_value + unit_fom.item()
-
-
-
-
-def FoM_gate_transformation(
-    get_u: Callable,
-    time_grid,
-    parameter_set,
-    pulse_settings_list,
-    target_gate,  # Not used but kept for API consistency
-    get_drive_fn
-):
-    # Step 1: Split parameters by channel
-    bss = [ps.basis_size for ps in pulse_settings_list]
-    indices = np.cumsum([0] + [3 * bs for bs in bss])
-    parameter_subsets = [
-        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
-    ]
-
-    # Step 2: Get pulses
-    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
-
-    # Step 3: Primal penalty
-    primal_value = sum(
-        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
-        for i in range(len(drive))
-    )
-
-    # Step 4: Extract propagator on qubit subspace (indices 6:10 = 7:10 in Julia)
-    full_propagator = get_propagator(get_u, time_grid, drive)
-    prop_sub = full_propagator[6:10, 6:10]
-
-    # Step 5: Target: diag(1, 1, 1, -1)
     target_gate_diag = torch.diag(torch.tensor([1, 1, 1, -1], dtype=torch.complex128))
 
-    # Step 6: Fidelity (standard Hilbert-Schmidt)
     N = target_gate_diag.shape[0]
     fidelity = (1 / N**2) * abs(torch.trace(prop_sub.conj().T @ target_gate_diag)) ** 2
 
-    # Step 7: Unitarity penalty
     unitarity = 1 - abs(torch.det(prop_sub))
-
-    # Step 8: Combine
     return abs(1.0 - fidelity.item()) + primal_value + unitarity.item()
 
 
-
-def FoM_gate_transformation(
-    get_u: Callable,
-    time_grid,
-    parameter_set,
-    pulse_settings_list,
-    target_gate,
-    get_drive_fn
-):
-    bss = [ps.basis_size for ps in pulse_settings_list]
-    indices = np.cumsum([0] + [3 * bs for bs in bss])
-    parameter_subsets = [
-        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
-    ]
-
-    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
-
-    primal_value = sum(
-        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
-        for i in range(len(drive))
-    )
-
-    full_propagator = get_propagator(get_u, time_grid, drive)
-
-    # Extract 4x4 subspace: indices 6–9
-    prop_sub = full_propagator[6:10, 6:10]
- #   print(prop_sub)
-    # --- Custom phase fidelity logic ---
-    s1 = torch.tensor([1.0] * 4, dtype=prop_sub.dtype) / 1 #4
-    
-    s1 = prop_sub @ s1
-    #print(s1)
-
-    phase = torch.angle(s1)
-    phase_sum1 = phase[0] - phase[1] - phase[2] + phase[3]
-    fid1 = math.cos((abs(phase_sum1.item()) - math.pi) / 4)
-
-    unit_fom = 1 - abs(torch.det(prop_sub))
-    cost = abs(1.0 - fid1)
-
-    # --- population reward ---
-    from evolution import get_evolution_vector
-
-    ψ0 = torch.zeros(12, dtype=torch.complex128)
-    ψ0[0] = 1.0  # assumes lower state is |0⟩
-
-    # Propagate with current drive
-    states = get_evolution_vector(get_u, time_grid, drive, ψ0)
-
-    excited_indices =list(range(6,12))
-    total_excited_population = sum(
-        sum(torch.abs(ψ[i])**2 for i in excited_indices).item()
-        for ψ in states
-    )
-
-    average_excited_population = total_excited_population / len(states)
-    excitation_encouragesment = 1.0 - average_excited_population
-
-    return cost + primal_value + unit_fom.item() + excitation_encouragesment
-
+# --------------------------
+# --- Objective Selector ---
+# --------------------------
 
 objective_dictionary: Dict[str, Callable] = {
     "State Preparation": FoM_state_preparation,
-    "Gate Transformation": FoM_gate_transformation
+    "Gate Transformation": FoM_gate_transformation,
+    "Multi-State Preparation": FoM_multi_state_preparation
 }
-
 
 def call_optimization_objective(objective_type: str):
     if objective_type not in objective_dictionary:
         raise ValueError(f"Unknown objective type: {objective_type}")
     return objective_dictionary[objective_type]
-
 
 def get_goal_function(
     get_u,
@@ -420,7 +211,8 @@ def get_goal_function(
     get_drive_fn,
     starting_state=None,
     target_state=None,
-    target_gate=None
+    target_gate=None,
+    initial_target_pairs=None
 ):
     fom_function = call_optimization_objective(objective_type)
 
@@ -434,7 +226,7 @@ def get_goal_function(
                 starting_state,
                 target_state,
                 get_drive_fn
-            )
+            ).item()
         return objective_fn
 
     elif objective_type == "Gate Transformation":
@@ -446,7 +238,19 @@ def get_goal_function(
                 pulse_settings_list,
                 target_gate,
                 get_drive_fn
-            )
+            ).item()
+        return objective_fn
+
+    elif objective_type == "Multi-State Preparation":
+        def objective_fn(x):
+            return fom_function(
+                get_u,
+                time_grid,
+                x,
+                pulse_settings_list,
+                initial_target_pairs,
+                get_drive_fn
+            ).item()
         return objective_fn
 
     else:
