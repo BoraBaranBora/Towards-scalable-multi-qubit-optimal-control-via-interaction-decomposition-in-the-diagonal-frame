@@ -66,7 +66,7 @@ goal_fn = get_goal_function(
 # Step 5: Initial guess
 # -----------------------------
 x0, f0 = get_initial_guess(
-    sample_size=30,
+    sample_size=3,
     goal_function=goal_fn,
     pulse_settings_list=pulse_settings_list
 )
@@ -79,20 +79,25 @@ print(f"Initial guess FoM: {f0:.6e}")
 # f0 = goal_fn(x0)
 # print(f"Custom initial guess FoM: {f0:.6e}")
 
-
+x0 = [ 2.48653747e+07,  3.74582420e+07,  8.54301395e+06,  3.79803283e+06,
+  1.05380194e+07, -7.84460537e+06,  1.00498499e+07,  2.68244707e+06,
+ -8.06684828e+06,  2.60425654e+07, -1.07776094e+08,  7.62585497e+07,
+  7.66387693e+07,  1.21859987e+08,  1.21799102e+08,  8.18639204e+07,
+  4.39026058e-01,  4.83955350e+00,  4.03005645e+00,  2.23683904e+00,
+ -3.92929001e+00,  2.33221331e+00,  1.76329139e+00, -2.76701795e+00]
 
 # -----------------------------
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 1000
+iterations = 20
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=0.25
+        goal_fn, x0, pulse_settings_list, sigma_init=0.01
     )
     for _ in range(superiterations):
         for j in range(iterations):
@@ -136,21 +141,21 @@ elif algo_type == "Nelder Mead":
 
 else:
     raise ValueError(f"Unsupported algorithm: {algo_type}")
+# -----------------------------
+# Step 7–8: Save and visualize
+# -----------------------------
+from datetime import datetime
+from pathlib import Path
 
-# -----------------------------
-# Step 7: Save and report
-# -----------------------------
-print("\nOptimization complete.")
-print(f"Best FoM: {f_opt:.6e}")
-print("Best parameters:", x_opt.numpy())
-np.savetxt("best_params.txt", x_opt.numpy())
-with open("best_fom.txt", "w") as f:
-    f.write(str(f_opt))
-    
+# Generate timestamped result folder
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+result_dir = Path("results") / f"pulse_{timestamp}"
+result_dir.mkdir(parents=True, exist_ok=True)
+
+# Compute optimized drive
 optimized_drive = get_drive(time_grid, x_opt, pulse_settings_list)
 
-# Save results
-from datetime import datetime
+# Save checkpoint
 checkpoint = {
     "params": x_opt,
     "fom": f_opt,
@@ -159,18 +164,19 @@ checkpoint = {
     "initial_target_pairs": initial_target_pairs,
     "Δ": Δ,
     "drive": optimized_drive,
-    "timestamp": datetime.now().isoformat(),
+    "timestamp": timestamp,
     "objective_type": "Multi-State Preparation"
 }
-torch.save(checkpoint, "pulse_solution.pt")
+torch.save(checkpoint, result_dir / "pulse_solution.pt")
 
+# Save extras
+np.savetxt(result_dir / "best_params.txt", x_opt.numpy())
+with open(result_dir / "best_fom.txt", "w") as f:
+    f.write(str(f_opt))
 
 # -----------------------------
-# Step 8: Visualize
+# Plot: Control Drives
 # -----------------------------
-optimized_drive = get_drive(time_grid, x_opt, pulse_settings_list)
-
-# Plot control drives
 plt.figure(figsize=(10, 4))
 for i, d in enumerate(optimized_drive):
     plt.plot(time_grid.numpy() * 1e9, d.numpy(), label=f"Drive {i+1}")
@@ -180,10 +186,12 @@ plt.title("Optimized Control Drives")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("optimized_drive.png")
-plt.show()
+plt.savefig(result_dir / "optimized_drive.png")
+plt.close()
 
-# Plot population transfers for each pair
+# -----------------------------
+# Plot: Population Transfers
+# -----------------------------
 plt.figure(figsize=(8, 6))
 for init_idx, tgt_idx in initial_target_pairs:
     ψ0 = torch.zeros(12, dtype=torch.complex128)
@@ -204,5 +212,5 @@ plt.title("Multi‑State Population Transfer")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("multi_state_populations.png")
-plt.show()
+plt.savefig(result_dir / "multi_state_populations.png")
+plt.close()
