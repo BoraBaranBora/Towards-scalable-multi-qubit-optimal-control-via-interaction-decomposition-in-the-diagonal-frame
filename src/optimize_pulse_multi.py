@@ -11,7 +11,6 @@ from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11
 from cma_runner import (
     initialize_cmaes,
     cmaes_iteration_step,
-    get_scaling_from_pulse_settings,
     unnormalize_params
 )
 from nelder_mead import call_initialization as nm_init, call_algo_step as nm_step
@@ -23,7 +22,7 @@ from nelder_mead import call_initialization as nm_init, call_algo_step as nm_ste
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=8,
+        basis_size=4,
         maximal_pulse=2*np.pi * 5e6,
         maximal_amplitude=(1/4) * 2*np.pi * 5e6,
         maximal_frequency=10e6 * 2 * np.pi,
@@ -79,25 +78,19 @@ print(f"Initial guess FoM: {f0:.6e}")
 # x0 = generate_custom_initial_guess(pulse_settings_list)
 # f0 = goal_fn(x0)
 # print(f"Custom initial guess FoM: {f0:.6e}")
-x0 = [ 2.48653747e+07,  3.74582420e+07,  8.54301395e+06,  3.79803283e+06,
-  1.05380194e+07, -7.84460537e+06,  1.00498499e+07,  2.68244707e+06,
- -8.06684828e+06,  2.60425654e+07, -1.07776094e+08,  7.62585497e+07,
-  7.66387693e+07,  1.21859987e+08,  1.21799102e+08,  8.18639204e+07,
-  4.39026058e-01,  4.83955350e+00,  4.03005645e+00,  2.23683904e+00,
- -3.92929001e+00,  2.33221331e+00,  1.76329139e+00, -2.76701795e+00]
 
 # -----------------------------
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 2
+iterations = 250
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=0.01
+        goal_fn, x0, pulse_settings_list, sigma_init=0.2
     )
     for _ in range(superiterations):
         for j in range(iterations):

@@ -90,8 +90,10 @@ def plot_grouped_populations(states, time_axis, groups, title, save_path):
 # Load multiple pulses
 # -----------------------------
 pulse_dirs = [
-    #Path("results/pulse_2025-07-25_10-36-00"),
-    Path("results/pulse_2025-07-25_11-59-35"),
+    #Path("results/pulse_2025-07-25_11-59-35"),
+    Path("results/pulse_2025-07-25_13-34-44"),
+
+    Path("results/pulse_2025-07-25_13-34-44"),
 
     # Add more if needed
 ]
@@ -158,3 +160,246 @@ leakage_group = {
 plot_grouped_populations(states_concat, time_axis, qubit0_groups, "Qubit Q0 Population", output_dir)
 plot_grouped_populations(states_concat, time_axis, qubit1_groups, "Qubit Q1 Population", output_dir)
 plot_grouped_populations(states_concat, time_axis, leakage_group, "Leakage Population", output_dir)
+
+
+def compute_qubit_phases(states, qubit_idx, basis_indices=[0,1,2,3,6,7,8,9]):
+    """
+    Computes phase φ = atan2(⟨Y⟩, ⟨X⟩) for a single qubit over time.
+    """
+    P = torch.zeros(len(basis_indices), 12, dtype=torch.complex128)
+    for i, idx in enumerate(basis_indices):
+        P[i, idx] = 1.0
+
+    X_op_small = pauli_operator_on_qubit("X", qubit_idx)
+    Y_op_small = pauli_operator_on_qubit("Y", qubit_idx)
+    X_op = P.T @ X_op_small @ P
+    Y_op = P.T @ Y_op_small @ P
+
+    phases = []
+    for ψ in states:
+        ρ = ψ[:, None] @ ψ[None, :].conj()
+        x = torch.real(torch.trace(X_op @ ρ)).item()
+        y = torch.real(torch.trace(Y_op @ ρ)).item()
+        φ = np.arctan2(y, x)
+        phases.append(φ)
+    return phases
+
+
+def plot_qubit_phases(states, time_axis, save_path):
+    plt.figure(figsize=(10, 6))
+    for q in range(3):  # change if you have more or fewer qubits
+        phases = compute_qubit_phases(states, qubit_idx=q)
+        phases = np.unwrap(phases)  # Optional: unwrap to avoid jumps
+        plt.plot(time_axis, phases, label=f"Q{q} Phase (X-Y plane)")
+
+    plt.xlabel("Time (ns)")
+    plt.ylabel("Phase (radians)")
+    plt.title("Qubit Phases in X-Y Plane")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(save_path / "qubit_phases.png")
+    plt.show()
+
+plot_qubit_phases(states_concat, time_axis, output_dir)
+
+
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def compute_bloch_vector_trajectory(states, qubit_idx, basis_indices=[0,1,2,3,6,7,8,9]):
+    """Computes ⟨X⟩, ⟨Y⟩, ⟨Z⟩ over time for a single qubit."""
+    P = torch.zeros(len(basis_indices), 12, dtype=torch.complex128)
+    for i, idx in enumerate(basis_indices):
+        P[i, idx] = 1.0
+
+    X_op = P.T @ pauli_operator_on_qubit("X", qubit_idx) @ P
+    Y_op = P.T @ pauli_operator_on_qubit("Y", qubit_idx) @ P
+    Z_op = P.T @ pauli_operator_on_qubit("Z", qubit_idx) @ P
+
+    bloch_coords = []
+    for ψ in states:
+        ρ = ψ[:, None] @ ψ[None, :].conj()
+        x = torch.real(torch.trace(X_op @ ρ)).item()
+        y = torch.real(torch.trace(Y_op @ ρ)).item()
+        z = torch.real(torch.trace(Z_op @ ρ)).item()
+        bloch_coords.append((x, y, z))
+
+    return np.array(bloch_coords)  # shape: (T, 3)
+
+
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from matplotlib import cm, colors
+
+def plot_bloch_trajectories_3d(states, save_path=None):
+    fig = plt.figure(figsize=(14, 4))
+    qubit_indices = [0, 1, 2]
+
+    for i, q in enumerate(qubit_indices):
+        coords = compute_bloch_vector_trajectory(states, q)  # shape (T, 3)
+        ax = fig.add_subplot(1, 3, i+1, projection='3d')
+
+        ax.set_title(f"Qubit {q} Bloch Trajectory")
+        ax.set_xlim([-1, 1])
+        ax.set_ylim([-1, 1])
+        ax.set_zlim([-1, 1])
+        ax.set_xlabel("⟨X⟩")
+        ax.set_ylabel("⟨Y⟩")
+        ax.set_zlabel("⟨Z⟩")
+
+        # Draw Bloch sphere
+        u, v = np.mgrid[0:2*np.pi:60j, 0:np.pi:30j]
+        x = np.cos(u) * np.sin(v)
+        y = np.sin(u) * np.sin(v)
+        z = np.cos(v)
+        ax.plot_surface(x, y, z, color='lightblue', alpha=0.1, linewidth=0)
+
+        # Coordinate axes
+        ax.quiver(0, 0, 0, 1, 0, 0, color='r', arrow_length_ratio=0.1)
+        ax.quiver(0, 0, 0, 0, 1, 0, color='g', arrow_length_ratio=0.1)
+        ax.quiver(0, 0, 0, 0, 0, 1, color='b', arrow_length_ratio=0.1)
+
+        # Trajectory with light-to-dark color gradient
+        points = coords.reshape(-1, 1, 3)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+        # Define a custom normalization from light to dark
+        cmap = cm.get_cmap("viridis")
+        norm = colors.Normalize(vmin=0, vmax=len(segments))
+        color_vals = cmap(norm(np.arange(len(segments))))
+
+        # Adjust alpha/lightness — fade in
+        min_alpha = 0.1
+        max_alpha = 1.0
+        alphas = np.linspace(min_alpha, max_alpha, len(segments))
+        color_vals[:, 3] = alphas  # Set alpha channel
+
+        lc = Line3DCollection(segments, colors=color_vals, linewidth=2)
+        ax.add_collection3d(lc)
+
+        # Final state marker
+        ax.scatter(*coords[-1], color='black', s=50)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path / "bloch_trajectories_3d_fade.png")
+    plt.show()
+
+plot_bloch_trajectories_3d(states_concat, save_path=output_dir)
+
+
+
+def create_plus_state_in_12d(basis_indices=[0,1,2,3,6,7,8,9]):
+    """
+    Creates a |+++⟩-like state projected into the 12D basis.
+    Assumes indices [0,1,2,3,6,7,8,9] correspond to valid computational basis states.
+    """
+    from itertools import product
+
+    qubit_basis = {
+        '0': torch.tensor([1.0, 0.0], dtype=torch.complex128),
+        '1': torch.tensor([0.0, 1.0], dtype=torch.complex128),
+        '+': (1/np.sqrt(2)) * torch.tensor([1.0, 1.0], dtype=torch.complex128)
+    }
+
+    ψ_full = torch.zeros(12, dtype=torch.complex128)
+    basis_map = {idx: i for i, idx in enumerate(basis_indices)}
+
+    for idx in basis_indices:
+        # Decode the qubit configuration of this index
+        # e.g., if idx=6 represents |101⟩, then config = '101'
+        config = format(idx, '04b')  # adjust if 3 qubits encoded differently
+        config = config[-3:]  # truncate to last 3 bits if needed
+
+        # Build amplitude as product of ⟨config|+⟩
+        amp = 1.0
+        for bit in config:
+            if bit == '0':
+                amp *= 1/np.sqrt(2)  # ⟨0|+⟩
+            elif bit == '1':
+                amp *= 1/np.sqrt(2)  # ⟨1|+⟩
+            else:
+                amp *= 0.0
+        ψ_full[idx] = amp
+
+    # Normalize (just in case)
+    ψ_full = ψ_full / torch.norm(ψ_full)
+    return ψ_full
+
+ψ0 = create_plus_state_in_12d()
+
+states_sequence = apply_sequence(get_U, time_grids, pulse_sequence, ψ0, Δ)
+states_concat = torch.cat(states_sequence, dim=0)
+plot_bloch_trajectories_3d(states_concat, save_path=output_dir)
+
+
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+from matplotlib import cm, colors
+
+def compute_xy_trajectory(states, qubit_idx, basis_indices=[0,1,2,3,6,7,8,9]):
+    """Compute ⟨X⟩, ⟨Y⟩ over time for one qubit."""
+    P = torch.zeros(len(basis_indices), 12, dtype=torch.complex128)
+    for i, idx in enumerate(basis_indices):
+        P[i, idx] = 1.0
+
+    X_op = P.T @ pauli_operator_on_qubit("X", qubit_idx) @ P
+    Y_op = P.T @ pauli_operator_on_qubit("Y", qubit_idx) @ P
+
+    xy = []
+    for ψ in states:
+        ρ = ψ[:, None] @ ψ[None, :].conj()
+        x = torch.real(torch.trace(X_op @ ρ)).item()
+        y = torch.real(torch.trace(Y_op @ ρ)).item()
+        xy.append((x, y))
+    return np.array(xy)  # shape (T, 2)
+
+def plot_xy_phase_trajectories(states, save_path=None):
+    fig, axs = plt.subplots(1, 3, figsize=(15, 4))
+    qubit_indices = [0, 1, 2]
+
+    for i, q in enumerate(qubit_indices):
+        coords = compute_xy_trajectory(states, q)  # shape (T, 2)
+        ax = axs[i]
+
+        ax.set_title(f"Qubit {q} Phase Trajectory (XY plane)")
+        ax.set_xlim([-1.1, 1.1])
+        ax.set_ylim([-1.1, 1.1])
+        ax.set_aspect('equal')
+        ax.set_xlabel("⟨X⟩")
+        ax.set_ylabel("⟨Y⟩")
+
+        # Draw unit circle
+        ax.add_patch(plt.Circle((0, 0), 1.0, color='lightgray', fill=False, linestyle='--'))
+
+        # Create fading color segments
+        points = coords.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+        #cmap = cm.colormaps["viridis"]
+        #norm = colors.Normalize(vmin=0, vmax=len(segments))
+        #color_vals = cmap(norm(np.arange(len(segments))))
+
+        cmap = cm.get_cmap("viridis")
+        norm = colors.Normalize(vmin=0, vmax=len(segments))
+        color_vals = cmap(norm(np.arange(len(segments))))
+
+
+        min_alpha = 0.1
+        max_alpha = 1.0
+        alphas = np.linspace(min_alpha, max_alpha, len(segments))
+        color_vals[:, 3] = alphas  # Apply fading alpha
+
+        lc = LineCollection(segments, colors=color_vals, linewidth=2)
+        ax.add_collection(lc)
+
+        # Final state marker
+        ax.plot(*coords[-1], 'ko', markersize=6)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path / "xy_phase_trajectories.png")
+    plt.show()
+
+plot_xy_phase_trajectories(states_concat, save_path=output_dir)
