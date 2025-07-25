@@ -260,11 +260,57 @@ def get_U(Ω, dt, t, Δ=0.0):
     return U
 
 
-#Ω = [1e6, 1.0]
-#dt = 1e-9
-#t = 0.0
+def get_U(Ω, dt, t, Δ=0.0):
+    # Control fields
+    Ω_e = factor * torch.cos((Λ_s + Δ) * t) * Ω[0] / γ_e  # Microwave drive (electron)
+    Ω_n = Ω[1]  # Direct nuclear drive (e.g., RF amplitude in Hz)
 
-#U = get_U(Ω, dt, t)
+    # Diagonal modulation
+    diag_cos = torch.tensor([
+        torch.cos(Λ10 * t), torch.cos(Λ11 * t), torch.cos(Λ00 * t),
+        torch.cos(Λ01 * t), torch.cos(Λm10 * t), torch.cos(Λm11 * t)
+    ] * 2, dtype=dtype)
+    diag_sin = torch.tensor([
+        torch.sin(Λ10 * t), torch.sin(Λ11 * t), torch.sin(Λ00 * t),
+        torch.sin(Λ01 * t), torch.sin(Λm10 * t), torch.sin(Λm11 * t)
+    ] * 2, dtype=dtype)
 
-#print("U shape:", U.shape)
-#print("Norm check:", torch.linalg.norm(U.conj().T @ U - torch.eye(12, dtype=dtype)))
+    H_diag = Ix1 @ torch.diag(diag_cos) - Iy1 @ torch.diag(diag_sin)
+    H_diag *= (γ_e / math.sqrt(2)) * Ω_e
+
+    # H3: electron-nuclear modulation term
+    mod1 = qx * torch.sin(Λ_s * t) + qy * torch.cos(Λ_s * t)
+    mod2 = Θ2 * (Iex3 * torch.cos(δ2 * t - ϕ2) + Iey3 * torch.sin(δ2 * t - ϕ2))
+    H3 = -math.sqrt(2) * γ_e * Ω_e * kronN(mod1, mod2)
+
+    # S14A (electron in |0⟩) modulation
+    s14_mat = torch.tensor([
+        [0, torch.exp(1j * ((-Q1 + ωa1) * t)), 0],
+        [torch.exp(1j * ((Q1 - ωa1) * t)), 0, torch.exp(1j * ((Q1 + ωa1) * t))],
+        [0, torch.exp(1j * ((-Q1 - ωa1) * t)), 0]
+    ], dtype=dtype) / math.sqrt(2)
+    S14A = kronN(e0, s14_mat, I2)
+
+    # S14C (electron in |1⟩) modulation
+    s14_mat_c = torch.tensor([
+        [0, torch.exp(1j * ((-Q1 + ω1) * -t)), 0],
+        [torch.exp(1j * ((Q1 - ω1) * -t)), 0, torch.exp(1j * ((Q1 + ω1) * -t))],
+        [0, torch.exp(1j * ((-Q1 - ω1) * -t)), 0]
+    ], dtype=dtype) / math.sqrt(2)
+    S14C = kronN(e1, s14_mat_c, I2)
+
+    # H4 & H5 — interactions with nuclear spins (now scaled by Ω_n)
+    H4 = Ω_n * (γ1 * S14A + γ2 * (Ix3A * torch.cos(ωa2 * t) + Iy3A * torch.sin(ωa2 * t)))
+    H5 = Ω_n * (γ1 * S14C + γ2 * (
+        Ix3C * torch.cos(ω2 * t) +
+        Iy3C * torch.sin(ω2 * t) +
+        Iz3C * Θ2 * torch.sin(ϕ2)
+    ))
+
+    # Total Hamiltonian
+    H_total = H_diag + H3 + H4 + H5
+
+    # Matrix exponential to get time evolution operator
+    U = torch.linalg.matrix_exp(-1j * H_total * dt)
+
+    return U
