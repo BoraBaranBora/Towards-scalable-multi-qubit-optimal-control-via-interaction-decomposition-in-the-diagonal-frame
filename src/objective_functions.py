@@ -211,37 +211,6 @@ def FoM_gate_transformation(
     time_grid,
     parameter_set,
     pulse_settings_list,
-    target_gate,
-    get_drive_fn
-):
-    bss = [ps.basis_size for ps in pulse_settings_list]
-    indices = np.cumsum([0] + [3 * bs for bs in bss])
-    parameter_subsets = [
-        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
-    ]
-
-    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
-    primal_value = sum(
-        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
-        for i in range(len(drive))
-    )
-
-    full_propagator = get_propagator(get_u, time_grid, drive)
-
-    prop_sub = full_propagator[6:10, 6:10]
-    target_gate_diag = torch.diag(torch.tensor([1, 1, 1, -1], dtype=torch.complex128))
-
-    N = target_gate_diag.shape[0]
-    fidelity = (1 / N**2) * abs(torch.trace(prop_sub.conj().T @ target_gate_diag)) ** 2
-
-    unitarity = 1 - abs(torch.det(prop_sub))
-    return abs(1.0 - fidelity.item()) + primal_value + unitarity.item()
-
-def FoM_gate_transformation(
-    get_u: Callable,
-    time_grid,
-    parameter_set,
-    pulse_settings_list,
     get_drive_fn: Callable,
     target_unitary: torch.Tensor,
     basis_indices: list = [0,1,2,3,6,7,8,9]
