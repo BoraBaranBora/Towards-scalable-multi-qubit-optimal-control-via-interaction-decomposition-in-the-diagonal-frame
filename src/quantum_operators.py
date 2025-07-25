@@ -1,6 +1,5 @@
 import torch
 from functools import reduce
-import operator
 
 # Pauli matrices
 I = torch.eye(2, dtype=torch.complex128)
@@ -15,4 +14,4 @@ def pauli_operator_on_qubit(pauli: str, qubit_index: int, total_qubits: int = 3)
 
     ops = [I] * total_qubits
     ops[qubit_index] = pauli_map[pauli]
-    return reduce(operator.kron, ops)
+    return reduce(torch.kron, ops)
