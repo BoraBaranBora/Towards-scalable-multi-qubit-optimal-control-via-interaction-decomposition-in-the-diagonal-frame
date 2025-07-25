@@ -30,6 +30,16 @@ def apply_sequence(get_U, time_grid, drive_list, ψ_init, Δ):
         ψ = states[-1]
     return all_states
 
+def apply_sequence(get_U, time_grids, drive_list, ψ_init, Δ):
+    ψ = ψ_init
+    all_states = []
+    for drive, tg in zip(drive_list, time_grids):
+        states = apply_pulse(get_U, tg, drive, ψ, Δ)
+        all_states.append(states)
+        ψ = states[-1]
+    return all_states
+
+
 def compute_bloch_projections(states, qubit_idx, basis_indices=[0,1,2,3,6,7,8,9]):
     P = torch.zeros(len(basis_indices), 12, dtype=torch.complex128)
     for i, idx in enumerate(basis_indices):
@@ -86,11 +96,19 @@ pulse_dirs = [
     # Add more if needed
 ]
 
+#pulse_sequence = []
+#for path in pulse_dirs:
+#    ckpt = torch.load(path / "pulse_solution.pt", weights_only=False)
+#    drive = ckpt.get("drive", get_drive(ckpt["time_grid"], ckpt["params"], ckpt["pulse_settings"]))
+#    pulse_sequence.append(drive)
+    
 pulse_sequence = []
+time_grids = []
 for path in pulse_dirs:
     ckpt = torch.load(path / "pulse_solution.pt", weights_only=False)
     drive = ckpt.get("drive", get_drive(ckpt["time_grid"], ckpt["params"], ckpt["pulse_settings"]))
     pulse_sequence.append(drive)
+    time_grids.append(ckpt["time_grid"])
 
 # Use Δ and time grid from first pulse
 ckpt_main = torch.load(pulse_dirs[0] / "pulse_solution.pt", weights_only=False)
@@ -105,7 +123,8 @@ time_axis = np.linspace(0, dt * (total_steps - 1), total_steps) * 1e9
 # -----------------------------
 ψ0 = torch.zeros(12, dtype=torch.complex128)
 ψ0[0] = 1.0
-states_sequence = apply_sequence(get_U, time_grid, pulse_sequence, ψ0, Δ)
+#states_sequence = apply_sequence(get_U, time_grid, pulse_sequence, ψ0, Δ)
+states_sequence = apply_sequence(get_U, time_grids, pulse_sequence, ψ0, Δ)
 states_concat = torch.cat(states_sequence, dim=0)
 
 # -----------------------------
