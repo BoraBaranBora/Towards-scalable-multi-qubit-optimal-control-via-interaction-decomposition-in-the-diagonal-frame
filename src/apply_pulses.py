@@ -80,8 +80,9 @@ def plot_grouped_populations(states, time_grid, groups, title, save_path=None):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    if save_path:
-        plt.savefig(save_path)
+    if save_path and save_path.is_dir():
+        save_file = save_path / "population_transfer.png"
+        plt.savefig(save_file)
     plt.show()
 
 
@@ -119,6 +120,71 @@ plot_population_transfers_for_pairs(
     save_path=result_dir
 )
 
+
+from quantum_operators import pauli_operator_on_qubit
+
+def compute_bloch_projections(states, qubit_idx):
+    """Compute ⟨Z⟩ and ⟨X⟩ for a given qubit across time."""
+    # Pauli operators embedded into full system
+    Z_op = pauli_operator_on_qubit("Z", qubit_idx)
+    X_op = pauli_operator_on_qubit("X", qubit_idx)
+
+    Z_vals = []
+    X_vals = []
+    for ψ in states:
+        ρ = ψ[:, None] @ ψ[None, :].conj()
+        Z_vals.append(torch.real(torch.trace(Z_op @ ρ)).item())
+        X_vals.append(torch.real(torch.trace(X_op @ ρ)).item())
+    return Z_vals, X_vals
+
+
+def compute_bloch_projections(states, qubit_idx, basis_indices=[0, 1, 2, 3, 6, 7, 8, 9]):
+    from quantum_operators import pauli_operator_on_qubit
+
+    # Build embedding projector P: 8x12
+    P = torch.zeros(len(basis_indices), 12, dtype=torch.complex128)
+    for i, idx in enumerate(basis_indices):
+        P[i, idx] = 1.0
+
+    # Pauli operators in 8D subspace
+    Z_op_small = pauli_operator_on_qubit("Z", qubit_idx)
+    X_op_small = pauli_operator_on_qubit("X", qubit_idx)
+
+    # Embed into 12D full space
+    Z_op = P.T @ Z_op_small @ P
+    X_op = P.T @ X_op_small @ P
+
+    Z_vals = []
+    X_vals = []
+
+    for ψ in states:
+        ρ = ψ.view(-1, 1) @ ψ.view(1, -1).conj()
+        Z_vals.append(torch.real(torch.trace(Z_op @ ρ)).item())
+        X_vals.append(torch.real(torch.trace(X_op @ ρ)).item())
+
+    return Z_vals, X_vals
+
+# Apply pulse once (use init 000 = level 0)
+ψ0 = torch.zeros(12, dtype=torch.complex128)
+ψ0[0] = 1.0
+states = apply_pulse(get_U, time_grid, optimized_drive, ψ0, Δ)
+
+time_ns = np.linspace(0, time_grid[-1].item() * 1e9, len(states))
+
+# Plot Bloch projections
+plt.figure(figsize=(12, 6))
+for q in range(3):
+    z_vals, x_vals = compute_bloch_projections(states, q)
+    plt.plot(time_ns, z_vals, label=f"Q{q} ⟨Z⟩")
+    plt.plot(time_ns, x_vals, "--", label=f"Q{q} ⟨X⟩")
+plt.xlabel("Time (ns)")
+plt.ylabel("Bloch Projection")
+plt.title("Qubit Bloch Projections Over Time (Init: 000)")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(result_dir / "bloch_projections_q0q1q2.png")
+plt.show()
 # -----------------------------
 # Plot per-qubit and leakage population
 # -----------------------------
@@ -145,10 +211,10 @@ leakage_group = {
 }
 
 # Plot grouped dynamics
-plot_grouped_populations(states, time_grid, qubit0_groups,
-                         "Qubit Q0 Population", result_dir / "q0_populations.png")
-plot_grouped_populations(states, time_grid, qubit1_groups,
-                         "Qubit Q1 Population", result_dir / "q1_populations.png")
+#plot_grouped_populations(states, time_grid, qubit0_groups,
+#                         "Qubit Q0 Population", result_dir / "q0_populations.png")
+#plot_grouped_populations(states, time_grid, qubit1_groups,
+#                         "Qubit Q1 Population", result_dir / "q1_populations.png")
 plot_grouped_populations(states, time_grid, leakage_group,
                          "Leakage Population", result_dir / "leakage_population.png")
 
