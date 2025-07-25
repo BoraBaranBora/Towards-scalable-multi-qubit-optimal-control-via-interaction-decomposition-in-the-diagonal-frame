@@ -133,7 +133,7 @@ def FoM_multi_state_preparation(
 
     primal_value = sum(
         calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
-        for i in range(len(drive))
+        for i in range(len(pulse_settings_list))
     )
 
     propagator = get_propagator(get_u, time_grid, drive)

@@ -80,8 +80,9 @@ def plot_grouped_populations(states, time_axis, groups, title, save_path):
 # Load multiple pulses
 # -----------------------------
 pulse_dirs = [
-    Path("results/pulse_2025-07-25_10-36-00"),
-    Path("results/pulse_2025-07-25_10-36-00"),
+    #Path("results/pulse_2025-07-25_10-36-00"),
+    Path("results/pulse_2025-07-25_11-59-35"),
+
     # Add more if needed
 ]
 
