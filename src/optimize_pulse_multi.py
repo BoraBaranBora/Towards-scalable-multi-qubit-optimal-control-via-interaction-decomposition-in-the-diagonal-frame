@@ -53,16 +53,29 @@ initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
 # -----------------------------
 # Step 4: Multi-State Preparation objective
 # -----------------------------
+objective_type = "Gate Transformation"  # or "Multi-State Preparation"
+
+if objective_type == "Gate Transformation":
+    X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
+    I = torch.eye(2, dtype=torch.complex128)
+    target_gate = torch.kron(torch.kron(X, I), I)
+    objective_config = {"target_gate": target_gate}
+
+elif objective_type == "Multi-State Preparation":
+    initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+    objective_config = {"initial_target_pairs": initial_target_pairs}
+
+else:
+    raise ValueError(f"Unsupported objective type: {objective_type}")
+
 goal_fn = get_goal_function(
     get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
-    objective_type="Multi-State Preparation",
+    objective_type=objective_type,
     time_grid=time_grid,
     pulse_settings_list=pulse_settings_list,
     get_drive_fn=get_drive,
-    initial_target_pairs=initial_target_pairs
+    **objective_config  # Use config to avoid duplication
 )
-
-
 
 # -----------------------------
 # Step 5: Initial guess
@@ -156,11 +169,11 @@ checkpoint = {
     "fom": f_opt,
     "time_grid": time_grid,
     "pulse_settings": pulse_settings_list,
-    "initial_target_pairs": initial_target_pairs,
     "Δ": Δ,
     "drive": optimized_drive,
     "timestamp": timestamp,
-    "objective_type": "Multi-State Preparation"
+    "objective_type": objective_type,
+    **objective_config  # Save relevant gate or state config
 }
 torch.save(checkpoint, result_dir / "pulse_solution.pt")
 
@@ -168,6 +181,20 @@ torch.save(checkpoint, result_dir / "pulse_solution.pt")
 np.savetxt(result_dir / "best_params.txt", x_opt.numpy())
 with open(result_dir / "best_fom.txt", "w") as f:
     f.write(str(f_opt))
+
+# Compute final propagator and save it
+from evolution import get_propagator
+propagator = get_propagator(lambda Ω, dt, t: get_U(Ω, dt, t, Δ), time_grid, optimized_drive)
+torch.save(propagator, result_dir / "optimized_propagator.pt")
+
+# Project into computational subspace
+basis_indices = [0, 1, 2, 3, 6, 7, 8, 9]
+P = torch.zeros((len(basis_indices), 12), dtype=torch.complex128)
+for i, idx in enumerate(basis_indices):
+    P[i, idx] = 1.0
+
+propagator_projected = P @ propagator @ P.T
+torch.save(propagator_projected, result_dir / "propagator_projected.pt")
 
 # -----------------------------
 # Plot: Control Drives
