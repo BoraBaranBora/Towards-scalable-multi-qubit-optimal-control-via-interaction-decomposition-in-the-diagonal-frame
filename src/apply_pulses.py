@@ -8,11 +8,10 @@ from quantum_model import get_U
 
 
 def apply_pulse(get_U, time_grid, drive, ψ_init, Δ):
-    """Apply a single pulse to an initial state and return the state trajectory."""
     states = [ψ_init]
     for i in range(len(time_grid)):
         dt = time_grid[1] - time_grid[0]
-        Ω = [d[i] for d in drive]  # List[float] at time i
+        Ω = [d[i] for d in drive]
         U = get_U(Ω, dt.item(), time_grid[i].item(), Δ)
         ψ_next = U @ states[-1]
         states.append(ψ_next)
@@ -20,7 +19,6 @@ def apply_pulse(get_U, time_grid, drive, ψ_init, Δ):
 
 
 def apply_sequence(get_U, time_grid, drive_list, ψ_init, Δ):
-    """Apply a sequence of pulses to an initial state."""
     ψ = ψ_init
     all_states = []
     for drive in drive_list:
@@ -28,6 +26,7 @@ def apply_sequence(get_U, time_grid, drive_list, ψ_init, Δ):
         all_states.append(states)
         ψ = states[-1]
     return all_states
+
 
 def plot_population_transfers_for_pairs(
     get_U,
@@ -38,19 +37,12 @@ def plot_population_transfers_for_pairs(
     save_path=None,
     title="Multi‑State Population Transfer"
 ):
-    """
-    Plots all initial→target transitions in one plot.
-    """
     time_ns = np.linspace(0, time_grid[-1].item() * 1e9, len(time_grid) + 1)
-
     plt.figure(figsize=(10, 6))
 
     for init_idx, target_idx in initial_target_pairs:
-        # Prepare initial state
         ψ0 = torch.zeros(12, dtype=torch.complex128)
         ψ0[init_idx] = 1.0
-
-        # Evolve the state
         states = [ψ0]
         for i in range(len(time_grid)):
             dt = time_grid[1] - time_grid[0]
@@ -58,8 +50,6 @@ def plot_population_transfers_for_pairs(
             U = get_U(Ω, dt.item(), time_grid[i].item(), Δ)
             ψ_next = U @ states[-1]
             states.append(ψ_next)
-
-        # Compute population in the target state
         pop = torch.stack([torch.abs(s) ** 2 for s in states]).numpy()
         plt.plot(time_ns, pop[:, target_idx], label=f"{init_idx} → {target_idx}")
 
@@ -70,13 +60,34 @@ def plot_population_transfers_for_pairs(
     plt.grid(True)
     plt.tight_layout()
     if save_path:
+        plt.savefig(save_path / "population_transfers.png")
+    plt.show()
+
+
+# 🆕 New helper to plot grouped populations
+def plot_grouped_populations(states, time_grid, groups, title, save_path=None):
+    pop = torch.stack([torch.abs(s) ** 2 for s in states]).numpy()
+    time_ns = np.linspace(0, time_grid[-1].item() * 1e9, len(states))
+
+    plt.figure(figsize=(10, 6))
+    for label, indices in groups.items():
+        pop_sum = pop[:, indices].sum(axis=1)
+        plt.plot(time_ns, pop_sum, label=label)
+
+    plt.xlabel("Time (ns)")
+    plt.ylabel("Population")
+    plt.title(title)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    if save_path:
         plt.savefig(save_path)
     plt.show()
+
 
 # -----------------------------
 # Load pulse from a result folder
 # -----------------------------
-# Change this to the result folder you want to load
 result_dir = Path("results") / "pulse_2025-07-25_10-36-00"  # <<--- EDIT THIS
 checkpoint_path = result_dir / "pulse_solution.pt"
 
@@ -97,24 +108,54 @@ print(f"Loaded pulse with FoM: {f_opt:.6e}")
 print(f"Target pairs: {initial_target_pairs}")
 
 # -----------------------------
-# Apply pulse to each init state
+# Plot transfer populations
 # -----------------------------
-
 plot_population_transfers_for_pairs(
     get_U=get_U,
     time_grid=time_grid,
     drive=optimized_drive,
     Δ=Δ,
-    initial_target_pairs=[(0, 6), (1, 7), (2, 8), (3, 9)],
+    initial_target_pairs=initial_target_pairs,
     save_path=result_dir
 )
 
 # -----------------------------
+# Plot per-qubit and leakage population
+# -----------------------------
+
+# Choose one ψ0 for analysis
+ψ0 = torch.zeros(12, dtype=torch.complex128)
+ψ0[0] = 1.0  # Starting from |000⟩
+
+states = apply_pulse(get_U, time_grid, optimized_drive, ψ0, Δ)
+
+# Group definitions
+qubit0_groups = {
+    "Q0 = 0": [0, 1, 2, 3],
+    "Q0 = 1": [6, 7, 8, 9]
+}
+qubit1_groups = {
+    "Q1 = 0": [0, 6],
+    "Q1 = 1": [1, 7],
+    "Q1 = 2": [2, 8],
+    "Q1 = 3": [3, 9]
+}
+leakage_group = {
+    "Leakage": [4, 5, 10, 11]
+}
+
+# Plot grouped dynamics
+plot_grouped_populations(states, time_grid, qubit0_groups,
+                         "Qubit Q0 Population", result_dir / "q0_populations.png")
+plot_grouped_populations(states, time_grid, qubit1_groups,
+                         "Qubit Q1 Population", result_dir / "q1_populations.png")
+plot_grouped_populations(states, time_grid, leakage_group,
+                         "Leakage Population", result_dir / "leakage_population.png")
+
+# -----------------------------
 # Optional: Apply pulse sequence
 # -----------------------------
-# Example for chaining multiple pulses
-# pulse2 = torch.load(...)["drive"]
-# pulse_sequence = [optimized_drive, pulse2]
-# ψ_start = torch.zeros(12, dtype=torch.complex128)
-# ψ_start[0] = 1.0
-# states_seq = apply_sequence(get_U, time_grid, pulse_sequence, ψ_start, Δ)
+# pulse2 = torch.load(...path...)["drive"]
+# sequence = [optimized_drive, pulse2]
+# ψ_start = torch.zeros(12, dtype=torch.complex128); ψ_start[0] = 1.0
+# full_states = apply_sequence(get_U, time_grid, sequence, ψ_start, Δ)
