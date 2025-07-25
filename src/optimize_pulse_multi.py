@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from datetime import datetime
+from pathlib import Path
 
 from pulse_settings import PulseSettings, get_initial_guess
 from get_drive import get_drive
@@ -78,27 +80,44 @@ goal_fn = get_goal_function(
 )
 
 # -----------------------------
-# Step 5: Initial guess
+# Step 5: Load or Generate x0
 # -----------------------------
-x0, f0 = get_initial_guess(
-    sample_size=3,
-    goal_function=goal_fn,
-    pulse_settings_list=pulse_settings_list
-)
-print(f"Initial guess FoM: {f0:.6e}")
+use_previous = True  # Toggle this to switch modes
+resume_from = "results/pulse_2025-07-25_13-34-44"  # Path to previous result
 
-# Optional: custom initial guess (commented)
-# def generate_custom_initial_guess(...):
-#     ...
-# x0 = generate_custom_initial_guess(pulse_settings_list)
-# f0 = goal_fn(x0)
-# print(f"Custom initial guess FoM: {f0:.6e}")
+if use_previous:
+    try:
+        # Load from previous checkpoint
+        ckpt = torch.load(Path(resume_from) / "pulse_solution.pt", map_location="cpu", weights_only=False)
+        x0 = ckpt["params"]
+
+        # Optionally recompute FoM with current settings
+        f0 = goal_fn(x0)
+        print(f"Resumed from previous checkpoint: FoM = {f0:.6e}")
+
+    except Exception as e:
+        print(f"[WARN] Failed to load from {resume_from}: {e}")
+        print("Falling back to random initial guess...")
+        x0, f0 = get_initial_guess(
+            sample_size=3,
+            goal_function=goal_fn,
+            pulse_settings_list=pulse_settings_list
+        )
+        print(f"Generated new initial guess: FoM = {f0:.6e}")
+else:
+    # Generate a new random initial guess
+    x0, f0 = get_initial_guess(
+        sample_size=3,
+        goal_function=goal_fn,
+        pulse_settings_list=pulse_settings_list
+    )
+    print(f"Generated new initial guess: FoM = {f0:.6e}")
 
 # -----------------------------
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 250
+iterations = 20
 superiterations = 1
 log = True
 verbose = True
@@ -152,8 +171,7 @@ else:
 # -----------------------------
 # Step 7–8: Save and visualize
 # -----------------------------
-from datetime import datetime
-from pathlib import Path
+
 
 # Generate timestamped result folder
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

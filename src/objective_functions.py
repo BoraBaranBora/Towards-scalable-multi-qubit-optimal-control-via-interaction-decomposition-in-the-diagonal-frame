@@ -249,7 +249,7 @@ def FoM_gate_transformation(
     fidelity = torch.abs(overlap) / dim
 
     # Return infidelity + regularization
-    return (1.0 - fidelity.item()) + 1e-2 * primal_value
+    return (1.0 - fidelity.item()) + 1e-2 * primal_value.item()
 # --------------------------
 # --- Objective Selector ---
 # --------------------------
