@@ -85,7 +85,7 @@ print(f"Initial guess FoM: {f0:.6e}")
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 50
+iterations = 1000
 superiterations = 1
 log = True
 verbose = True
