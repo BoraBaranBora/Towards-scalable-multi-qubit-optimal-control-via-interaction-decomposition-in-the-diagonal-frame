@@ -201,6 +201,9 @@ def FoM_multi_state_preparation(
 
     avg_infidelity = total_infidelity / len(initial_target_pairs)
 
+    return avg_infidelity + 1e-2 * primal_value
+
+
 
 # -------------------------
 # --- Gate Transformation ---
