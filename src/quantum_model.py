@@ -260,11 +260,14 @@ def get_U(Ω, dt, t, Δ=0.0):
     return U
 
 
+
+
+
 def get_U(Ω, dt, t, Δ=0.0):
     # Control fields
     Ω_e = factor * torch.cos((Λ_s + Δ) * t) * Ω[0] / γ_e  # Microwave drive (electron)
-    Ω_n = Ω[1]  # Direct nuclear drive (e.g., RF amplitude in Hz)
-
+    #Ω_n = Ω[1]  # Direct nuclear drive (e.g., RF amplitude in Hz)
+    Ω_n = Ω[1] if len(Ω) > 1 else 0.0
     # Diagonal modulation
     diag_cos = torch.tensor([
         torch.cos(Λ10 * t), torch.cos(Λ11 * t), torch.cos(Λ00 * t),
