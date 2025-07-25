@@ -146,6 +146,24 @@ print("Best parameters:", x_opt.numpy())
 np.savetxt("best_params.txt", x_opt.numpy())
 with open("best_fom.txt", "w") as f:
     f.write(str(f_opt))
+    
+optimized_drive = get_drive(time_grid, x_opt, pulse_settings_list)
+
+# Save results
+from datetime import datetime
+checkpoint = {
+    "params": x_opt,
+    "fom": f_opt,
+    "time_grid": time_grid,
+    "pulse_settings": pulse_settings_list,
+    "initial_target_pairs": initial_target_pairs,
+    "Δ": Δ,
+    "drive": optimized_drive,
+    "timestamp": datetime.now().isoformat(),
+    "objective_type": "Multi-State Preparation"
+}
+torch.save(checkpoint, "pulse_solution.pt")
+
 
 # -----------------------------
 # Step 8: Visualize
