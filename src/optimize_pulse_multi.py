@@ -62,6 +62,8 @@ goal_fn = get_goal_function(
     initial_target_pairs=initial_target_pairs
 )
 
+
+
 # -----------------------------
 # Step 5: Initial guess
 # -----------------------------

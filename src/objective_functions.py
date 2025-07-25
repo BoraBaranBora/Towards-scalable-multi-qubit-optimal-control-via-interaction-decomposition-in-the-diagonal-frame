@@ -154,6 +154,54 @@ def FoM_multi_state_preparation(
     avg_infidelity = total_infidelity / len(initial_target_pairs)
     return avg_infidelity + 1e-2 * primal_value
 
+
+def FoM_multi_state_preparation(
+    get_u: Callable,
+    time_grid,
+    parameter_set,
+    pulse_settings_list,
+    initial_target_pairs: List[tuple],
+    get_drive_fn: Callable
+):
+    if isinstance(parameter_set, np.ndarray):
+        parameter_set = torch.tensor(parameter_set, dtype=torch.float64)
+
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = np.cumsum([0] + [3 * bs for bs in bss])
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+
+    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
+
+    primal_value = sum(
+        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
+        for i in range(len(pulse_settings_list))
+    )
+
+    propagator = get_propagator(get_u, time_grid, drive)
+
+    total_infidelity = 0.0
+    phases = []
+    for init_idx, target_idx in initial_target_pairs:
+        ψ0 = torch.zeros(12, dtype=torch.complex128)
+        ψ0[init_idx] = 1.0
+
+        ψ_target = torch.zeros(12, dtype=torch.complex128)
+        ψ_target[target_idx] = 1.0
+
+        ψ_final = propagator @ ψ0
+        inner_product = torch.dot(ψ_target.conj(), ψ_final)
+
+        fidelity = torch.abs(inner_product) ** 2
+        phase_diff = torch.angle(inner_product)
+        phases.append(phase_diff.item())
+
+        total_infidelity += (1 - fidelity)
+
+    avg_infidelity = total_infidelity / len(initial_target_pairs)
+
+
 # -------------------------
 # --- Gate Transformation ---
 # -------------------------
@@ -189,7 +237,50 @@ def FoM_gate_transformation(
     unitarity = 1 - abs(torch.det(prop_sub))
     return abs(1.0 - fidelity.item()) + primal_value + unitarity.item()
 
+def FoM_gate_transformation(
+    get_u: Callable,
+    time_grid,
+    parameter_set,
+    pulse_settings_list,
+    get_drive_fn: Callable,
+    target_unitary: torch.Tensor,
+    basis_indices: list = [0,1,2,3,6,7,8,9]
+):
+    if isinstance(parameter_set, np.ndarray):
+        parameter_set = torch.tensor(parameter_set, dtype=torch.float64)
 
+    # Partition parameters
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = np.cumsum([0] + [3 * bs for bs in bss])
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+
+    # Compute drives
+    drive = get_drive_fn(time_grid, parameter_set, pulse_settings_list)
+
+    # Primal value: pulse energy/cost
+    primal_value = sum(
+        calculate_primal(drive[i], parameter_subsets[i], pulse_settings_list[i])
+        for i in range(len(pulse_settings_list))
+    )
+
+    # Compute full propagator
+    propagator = get_propagator(get_u, time_grid, drive)  # shape (12x12)
+
+    # Project target unitary into 12D
+    P = torch.zeros((len(basis_indices), 12), dtype=torch.complex128)
+    for i, idx in enumerate(basis_indices):
+        P[i, idx] = 1.0
+    U_target_12 = P.T @ target_unitary @ P
+
+    # Fidelity between propagator and target
+    overlap = torch.trace(U_target_12.conj().T @ propagator)
+    dim = U_target_12.shape[0]
+    fidelity = torch.abs(overlap) / dim
+
+    # Return infidelity + regularization
+    return (1.0 - fidelity.item()) + 1e-2 * primal_value
 # --------------------------
 # --- Objective Selector ---
 # --------------------------
