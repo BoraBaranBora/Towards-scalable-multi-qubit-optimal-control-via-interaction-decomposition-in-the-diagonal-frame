@@ -9,7 +9,7 @@ class PulseSettings:
     maximal_frequency: float
     minimal_frequency: float
     maximal_phase: float
-
+    channel_type: str  # Optional field with default
 
 
 import numpy as np
@@ -24,6 +24,9 @@ def get_random_pulse_parameters(pulse_settings: PulseSettings) -> torch.Tensor:
     mf = pulse_settings.maximal_frequency
     minf = pulse_settings.minimal_frequency
     mp = pulse_settings.maximal_phase
+
+    if bs == 0:
+        return torch.tensor([], dtype=torch.float64)  # ← handles dummy channels
 
     if bt == "Carrier":
         freq_shape = np.array([(mf - minf) / 2 + minf for _ in range(bs)])

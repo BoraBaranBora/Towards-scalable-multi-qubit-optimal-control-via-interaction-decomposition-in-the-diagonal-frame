@@ -92,3 +92,33 @@ def get_drive(time_grid, parameter_set, pulse_settings_list):
         get_pulse(time_grid, p, ps) for p, ps in zip(parameter_subsets, pulse_settings_list)
     ]
     return pulse_list
+
+
+def get_drive(time_grid, parameter_set, pulse_settings_list):
+    bss = [ps.basis_size for ps in pulse_settings_list]
+    indices = [0] + list(torch.cumsum(torch.tensor([3 * b for b in bss]), dim=0).numpy())
+    parameter_subsets = [
+        parameter_set[indices[i]:indices[i + 1]] for i in range(len(bss))
+    ]
+
+    # Classify by channel type
+    mw_pulse = None
+    rf_pulse = None
+
+    for params, ps in zip(parameter_subsets, pulse_settings_list):
+        pulse = get_pulse(time_grid, params, ps)
+        if ps.channel_type == "MW":
+            mw_pulse = pulse
+        elif ps.channel_type == "RF":
+            rf_pulse = pulse
+        else:
+            raise ValueError(f"Unsupported channel_type: {ps.channel_type}")
+
+    # Ensure both MW and RF exist; pad with zeros if needed
+    shape = time_grid.shape
+    if mw_pulse is None:
+        mw_pulse = torch.zeros(shape, dtype=torch.float64)
+    if rf_pulse is None:
+        rf_pulse = torch.zeros(shape, dtype=torch.float64)
+
+    return [mw_pulse, rf_pulse]
