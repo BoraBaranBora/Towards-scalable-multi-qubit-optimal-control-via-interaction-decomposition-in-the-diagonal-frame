@@ -16,3 +16,4 @@ def pauli_operator_on_qubit(pauli: str, qubit_index: int, total_qubits: int = 3)
     ops = [I] * total_qubits
     ops[qubit_index] = pauli_map[pauli]
     return reduce(torch.kron, ops)
+

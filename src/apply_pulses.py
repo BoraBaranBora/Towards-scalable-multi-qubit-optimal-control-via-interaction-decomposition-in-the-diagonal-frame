@@ -91,9 +91,20 @@ def plot_grouped_populations(states, time_axis, groups, title, save_path):
 # -----------------------------
 pulse_dirs = [
     #Path("results/pulse_2025-07-25_11-59-35"),
-    Path("results/pulse_2025-07-25_13-34-44"),
+    #Path("results/pulse_2025-07-25_13-34-44"),
+    #Path("results/pulse_2025-07-25_18-15-24"),
+    #Path("results/pulse_2025-07-25_18-25-28"),
+    #Path("results/pulse_2025-07-25_18-49-16"),
+    #Path("results/pulse_2025-07-25_20-56-15"),
+    #Path("results/pulse_2025-07-25_22-19-36"),
+    #Path("results/pulse_2025-07-26_10-40-10"),
+    Path("results/pulse_2025-07-26_11-57-48"),
 
-    Path("results/pulse_2025-07-25_13-34-44"),
+
+
+
+
+
 
     # Add more if needed
 ]
@@ -403,3 +414,63 @@ def plot_xy_phase_trajectories(states, save_path=None):
     plt.show()
 
 plot_xy_phase_trajectories(states_concat, save_path=output_dir)
+
+
+def compute_single_qubit_entropy(states, qubit_idx, basis_indices=[0,1,2,3,6,7,8,9]):
+    """
+    Computes the von Neumann entropy S(ρ_A) of a single qubit reduced density matrix over time.
+    This quantifies entanglement with the rest of the system.
+    """
+    import scipy.linalg
+
+    entropy_vals = []
+
+    for ψ in states:
+        ρ = ψ[:, None] @ ψ[None, :].conj()  # full density matrix (12x12)
+
+        # Project into computational subspace
+        P = torch.zeros(len(basis_indices), 12, dtype=torch.complex128)
+        for i, idx in enumerate(basis_indices):
+            P[i, idx] = 1.0
+        ρ_small = P @ ρ @ P.T  # (8x8)
+
+        # Reshape to 3-qubit tensor
+        ρ_tensor = ρ_small.view(2, 2, 2, 2, 2, 2)  # shape: (2,2,2)x(2,2,2)
+
+        # Partial trace over other qubits
+        if qubit_idx == 0:
+            ρA = torch.einsum("abcdef->bf", ρ_tensor)  # trace over 0th qubit
+        elif qubit_idx == 1:
+            ρA = torch.einsum("abcdef->df", ρ_tensor)  # trace over 1st qubit
+        elif qubit_idx == 2:
+            ρA = torch.einsum("abcdef->af", ρ_tensor)  # trace over 2nd qubit
+        else:
+            raise ValueError("Only qubit indices 0, 1, 2 are supported.")
+
+        # Convert to NumPy and compute eigenvalues
+        ρA = ρA.cpu().numpy()
+        eigvals = np.linalg.eigvalsh(ρA)
+        eigvals = np.clip(eigvals, 1e-12, 1.0)
+        entropy = -np.sum(eigvals * np.log2(eigvals))
+        entropy_vals.append(entropy)
+
+    return entropy_vals
+
+
+def plot_qubit_entropies(states, time_axis, save_path=None):
+    plt.figure(figsize=(10, 6))
+    for q in range(3):
+        ent = compute_single_qubit_entropy(states, qubit_idx=q)
+        plt.plot(time_axis, ent, label=f"Qubit {q}")
+
+    plt.xlabel("Time (ns)")
+    plt.ylabel("Entropy S(ρ_A)")
+    plt.title("Single-Qubit Entanglement Entropy Over Time")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path / "qubit_entropies.png")
+    plt.show()
+
+plot_qubit_entropies(states_concat, time_axis, save_path=output_dir)
