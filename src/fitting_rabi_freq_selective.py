@@ -3,7 +3,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-from quantum_model import get_U, dtype, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11
+from quantum_model import get_U, dtype, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
 from evolution import get_time_grid, get_evolution_vector
 
 # --- Index → Λ Mapping ---
@@ -13,11 +13,14 @@ from evolution import get_time_grid, get_evolution_vector
 }
 
 # --- Parameters ---
-Ω_rabi = 5e6  # Hz
+Ω_rabi_target = 2 * math.pi * 5e6  # rad/s — desired Rabi frequency
+B1_amplitude = Ω_rabi_target / γ_e  # Tesla — physical microwave field amplitude
+print(B1_amplitude)
+print(γ_e)
 steps_per_ns = 10
 duration_ns = 1000  # ns
-Ω_drive = 2 * math.pi * Ω_rabi
 
+Ω_drive = B1_amplitude  # This is what you feed into the Hamiltonian
 # --- Transition Selection ---
 initial_index = 0   # Choose from 0 to 11
 target_index = 6    # Final state index (e.g. 6 = |-1, +1, ↑⟩)
@@ -31,7 +34,7 @@ t_ns = time_grid.numpy() * 1e9
 
 # --- Drive ---
 Ω1 = torch.ones_like(time_grid) * Ω_drive
-Ω2 = torch.ones_like(time_grid) * 1.0
+Ω2 = torch.ones_like(time_grid) * 0.0
 
 # --- Initial State ---
 ψ0 = torch.zeros(12, dtype=dtype)

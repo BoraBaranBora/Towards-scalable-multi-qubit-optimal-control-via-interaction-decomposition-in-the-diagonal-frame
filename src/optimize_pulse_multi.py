@@ -8,7 +8,10 @@ from pulse_settings import PulseSettings, get_initial_guess
 from get_drive import get_drive
 from objective_functions import get_goal_function
 from evolution import get_time_grid, get_evolution_vector
-from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11
+from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
+
+from custom_gates import ccz_gate  # or wherever you defined it
+
 
 from cma_runner import (
     initialize_cmaes,
@@ -21,23 +24,27 @@ from nelder_mead import call_initialization as nm_init, call_algo_step as nm_ste
 # -----------------------------
 # Step 1: Define pulse settings
 # -----------------------------
+# "What field amplitude gives me a 5 MHz Rabi frequency if each Tesla gives 175,929.1886 MHz of rotation?"
+#  in the case of the electron?"
+B_max = 5e6 / 175929.1886  # → ≈ 2.843e-5 Tesla: MHz/ MHz/Tesla
+
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
         basis_size=4,
-        maximal_pulse=2*np.pi * 5e6,
-        maximal_amplitude=(1/4) * 2*np.pi * 5e6,
-        maximal_frequency=10e6 * 2 * np.pi,
+        maximal_pulse=B_max,               # Or total integral limit
+        maximal_amplitude=B_max/3,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
+        maximal_frequency=15 * np.pi * 1e6,
         minimal_frequency=0,
-        maximal_phase=1 * np.pi,
-        channel_type = "MW"
+        maximal_phase=np.pi,
+        channel_type="MW"
     )
 ]
 
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 350
+duration_ns = 210
 steps_per_ns = 10
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
@@ -55,17 +62,25 @@ initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
 # -----------------------------
 # Step 4: Multi-State Preparation objective
 # -----------------------------
-objective_type = "Gate Transformation"  # or "Multi-State Preparation"
+objective_type = "Multi-State Preparation"  # or "Multi-State Preparation"
 
 if objective_type == "Gate Transformation":
-    X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
-    I = torch.eye(2, dtype=torch.complex128)
-    target_gate = torch.kron(torch.kron(X, I), I)
+    #X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
+    #I = torch.eye(2, dtype=torch.complex128)
+    #target_gate = torch.kron(torch.kron(X, I), I)
+    #objective_config = {"target_gate": target_gate}
+
+    target_gate = ccz_gate()
     objective_config = {"target_gate": target_gate}
+
 
 elif objective_type == "Multi-State Preparation":
     initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+    #initial_target_pairs = [(0, 6), (2, 8)]
     objective_config = {"initial_target_pairs": initial_target_pairs}
+
+elif objective_type == "Custom Phase Structure":
+    objective_config = {"target_gate": None}  # no additional inputs needed
 
 else:
     raise ValueError(f"Unsupported objective type: {objective_type}")
@@ -82,8 +97,8 @@ goal_fn = get_goal_function(
 # -----------------------------
 # Step 5: Load or Generate x0
 # -----------------------------
-use_previous = True  # Toggle this to switch modes
-resume_from = "results/pulse_2025-07-25_13-34-44"  # Path to previous result
+use_previous = False
+resume_from = "results/pulse_2025-07-26_11-57-48"  # Path to previous result
 
 if use_previous:
     try:
@@ -99,7 +114,7 @@ if use_previous:
         print(f"[WARN] Failed to load from {resume_from}: {e}")
         print("Falling back to random initial guess...")
         x0, f0 = get_initial_guess(
-            sample_size=3,
+            sample_size=30,
             goal_function=goal_fn,
             pulse_settings_list=pulse_settings_list
         )
@@ -107,7 +122,7 @@ if use_previous:
 else:
     # Generate a new random initial guess
     x0, f0 = get_initial_guess(
-        sample_size=3,
+        sample_size=30,
         goal_function=goal_fn,
         pulse_settings_list=pulse_settings_list
     )
@@ -117,7 +132,7 @@ else:
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 20
+iterations = 250
 superiterations = 1
 log = True
 verbose = True
