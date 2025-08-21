@@ -5,6 +5,11 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from quantum_model import get_U, dtype, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
 from evolution import get_time_grid, get_evolution_vector
+# 28.07. ist das aufloesbar mit 10 steps per ns, waere mit RWA kein problem, check technical paper fuer warum das weggelassejn
+# steiger aufgloesung bis verbesserung ausbleibt, weitere ueberfluessig
+# trotzdem nach RWA
+
+
 
 # --- Index → Λ Mapping ---
 Λ_dict = {
@@ -17,7 +22,7 @@ from evolution import get_time_grid, get_evolution_vector
 B1_amplitude = Ω_rabi_target / γ_e  # Tesla — physical microwave field amplitude
 print(B1_amplitude)
 print(γ_e)
-steps_per_ns = 10
+steps_per_ns = 5
 duration_ns = 1000  # ns
 
 Ω_drive = B1_amplitude  # This is what you feed into the Hamiltonian

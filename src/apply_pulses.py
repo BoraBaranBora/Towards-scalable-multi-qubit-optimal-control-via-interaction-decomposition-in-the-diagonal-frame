@@ -6,7 +6,12 @@ from pathlib import Path
 from get_drive import get_drive
 from quantum_model import get_U
 from quantum_operators import pauli_operator_on_qubit
+from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
 
+
+
+#MW 30
+#RF 50KHz
 # -----------------------------
 # Utility functions
 # -----------------------------
@@ -98,12 +103,49 @@ pulse_dirs = [
     #Path("results/pulse_2025-07-25_20-56-15"),
     #Path("results/pulse_2025-07-25_22-19-36"),
     #Path("results/pulse_2025-07-26_10-40-10"),
-    Path("results/pulse_2025-07-26_11-57-48"),
+    #Path("results/pulse_2025-07-26_11-57-48"),
+    #Path("results/pulse_2025-07-26_13-44-20"),
+    #Path("results/pulse_2025-07-26_15-22-28"),
+    #Path("results/pulse_2025-07-26_16-33-30"),
+    #Path("results/pulse_2025-07-26_18-45-40"),
+    #Path("results/pulse_2025-07-26_19-27-08"),
+    #Path("results/pulse_2025-07-26_20-33-48"), # matthias geschickt
+    #Path("results/pulse_2025-07-26_20-59-05"),
+    #Path("results/pulse_2025-07-26_23-20-17"),
+
+    #Path("results/pulse_2025-07-28_13-38-03") # Z 1 Z
+
+    #Path("results/pulse_2025-07-28_16-27-48"),
+
+    #Path("results/pulse_2025-07-28_16-58-32")
+
+    #Path("results/pulse_2025-07-28_17-04-12")
 
 
+    #Path("results/pulse_2025-07-29_17-24-01")
+
+    #Path("results/pulse_2025-07-29_18-29-25")
+
+    #Path("results/pulse_2025-07-30_14-37-01")
 
 
+    #Path("results/pulse_2025-08-03_21-43-43")
 
+    #Path("results/pulse_2025-08-04_02-26-14") #best conditional on one register qubit
+
+    #Path("results/pulse_2025-08-04_12-10-13") 
+
+    #Path("results/pulse_2025-08-13_14-57-48")
+
+    #Path("results/pulse_2025-08-19_15-47-00"), # good, conditional on C13, NV flip, 98% fidelity 
+    #Path("results/pulse_2025-08-19_15-47-00") # good, conditional on C13, NV flip, 98% fidelity 
+
+    #Path("results/pulse_2025-08-20_17-11-27")
+
+    Path("results/pulse_2025-07-26_20-33-48"), # matthias geschickt
+    #Path("results/pulse_2025-07-26_20-33-48"), # matthias geschickt
+    #Path("results/pulse_2025-07-26_20-33-48"), # matthias geschickt
+    #Path("results/pulse_2025-07-26_20-33-48"), # matthias geschickt, 4 times this should be a CZ like entangler between 2 and 3, up to local z phases
 
 
     # Add more if needed
@@ -125,7 +167,8 @@ for path in pulse_dirs:
 
 # Use Δ and time grid from first pulse
 ckpt_main = torch.load(pulse_dirs[0] / "pulse_solution.pt", weights_only=False)
-Δ = ckpt_main["Δ"]
+#Δ = ckpt_main["Δ"]
+Δ = (Λ00 - Λ_s).item() # 11'e goyduysan 00' gerekli durumu ceviriy
 time_grid = ckpt_main["time_grid"]
 dt = (time_grid[1] - time_grid[0]).item()
 total_steps = (len(time_grid) + 1) * len(pulse_sequence)
@@ -145,6 +188,56 @@ states_concat = torch.cat(states_sequence, dim=0)
 # -----------------------------
 output_dir = pulse_dirs[-1]  # Save plots in last pulse folder
 print(f"Saving analysis to: {output_dir}")
+
+
+def plot_population_transfers(get_U, time_grid, drive, Δ, initial_target_pairs, save_path, filename="multi_state_populations.png"):
+    """
+    Plots population transfer from specified initial states to target states.
+
+    Args:
+        get_U: function(Ω, dt, t, Δ) → unitary operator
+        time_grid: 1D tensor of time steps
+        drive: list of drive signals (usually from checkpoint)
+        Δ: detuning parameter
+        initial_target_pairs: list of tuples [(init_idx, target_idx), ...]
+        save_path: Path object where to save the plot
+        filename: name of output file
+    """
+    plt.figure(figsize=(8, 6))
+    for init_idx, tgt_idx in initial_target_pairs:
+        ψ0 = torch.zeros(12, dtype=torch.complex128)
+        ψ0[init_idx] = 1.0
+
+        # Evolve using the same logic as apply_pulse
+        states = apply_pulse(get_U, time_grid, drive, ψ0, Δ)
+        pop = torch.stack([torch.abs(s)**2 for s in states]).numpy()
+        #plt.plot(time_grid.numpy() * 1e9, pop[:, tgt_idx], label=f"{init_idx} → {tgt_idx}")
+        dt = (time_grid[1] - time_grid[0]).item()
+        extended_time_axis = np.linspace(0, dt * (len(time_grid)), len(time_grid) + 1) * 1e9
+        plt.plot(extended_time_axis, pop[:, tgt_idx], label=f"{init_idx} → {tgt_idx}")
+
+    plt.xlabel("Time (ns)")
+    plt.ylabel("Target Population")
+    plt.title("Multi‑State Population Transfer")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    #plt.savefig(save_path / filename)
+    plt.show()
+
+
+    # Define pairs of interest
+initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+
+# Use one of the pulse drives (e.g., first one) for demonstration
+plot_population_transfers(
+    get_U=get_U,
+    time_grid=time_grids[0],
+    drive=pulse_sequence[0],
+    Δ=Δ,
+    initial_target_pairs=initial_target_pairs,
+    save_path=output_dir
+)
 
 # -----------------------------
 # Plot: Bloch projections

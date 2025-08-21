@@ -191,76 +191,14 @@ def MHz(val): return val * two_pi * 1e6
 
 Λ00 = Λ_s - (0 * (γ_n[0] * B_0 - ω_n(0)) + 0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
 Λ01 = Λ_s - (0 * (γ_n[0] * B_0 - ω_n(0)) + -0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
-Λ10 = Λ_s - (-1 * (γ_n[0] * B_0 - ω_n(0)) + 0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
-Λ11 = Λ_s - (-1 * (γ_n[0] * B_0 - ω_n(0)) + -0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
-Λm10 = Λ_s - (1 * (γ_n[0] * B_0 - ω_n(0)) + 0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
-Λm11 = Λ_s - (1 * (γ_n[0] * B_0 - ω_n(0)) + -0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
+Λm10 = Λ_s - (-1 * (γ_n[0] * B_0 - ω_n(0)) + 0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
+Λm11 = Λ_s - (-1 * (γ_n[0] * B_0 - ω_n(0)) + -0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
+Λ10 = Λ_s - (1 * (γ_n[0] * B_0 - ω_n(0)) + 0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
+Λ11 = Λ_s - (1 * (γ_n[0] * B_0 - ω_n(0)) + -0.5 * (γ_n[1] * B_0 - ω_n(1))) * two_pi * 1e6
 
 
 
 factor = 1.0
-
-def get_U(Ω, dt, t, Δ=0.0):
-    # Control fields
-    Ω_e = factor * torch.cos((Λ_s + Δ) * t) * (Ω[0]) / γ_e #2.0*math.pi*5e6 
-    Ω_x = Ω_e * (γ_e / γ2)
-
-    # Diagonal modulation
-    diag_cos = torch.tensor([
-        torch.cos(Λ10 * t), torch.cos(Λ11 * t), torch.cos(Λ00 * t),
-        torch.cos(Λ01 * t), torch.cos(Λm10 * t), torch.cos(Λm11 * t)
-    ] * 2, dtype=dtype)
-
-    diag_sin = torch.tensor([
-        torch.sin(Λ10 * t), torch.sin(Λ11 * t), torch.sin(Λ00 * t),
-        torch.sin(Λ01 * t), torch.sin(Λm10 * t), torch.sin(Λm11 * t)
-    ] * 2, dtype=dtype)
-
-    H = Ix1 @ torch.diag(diag_cos)
-    H2 = Iy1 @ torch.diag(diag_sin)
-
-    H = H - H2
-    H = H * (γ_e / math.sqrt(2)) * Ω_e
-
-    # H3 term (tensor product with modulated Iex3/Iey3)
-    mod1 = qx * torch.sin(Λ_s * t) + qy * torch.cos(Λ_s * t)
-    mod2 = Θ2 * (Iex3 * torch.cos(δ2 * t - ϕ2) + Iey3 * torch.sin(δ2 * t - ϕ2))
-    H3 = -math.sqrt(2) * γ_e * Ω_e * kronN(mod1, mod2)
-
-    # S14A: auxiliary modulation
-    s14_mat = torch.tensor([
-        [0, torch.exp(1j * ((-Q1 + ωa1) * t)), 0],
-        [torch.exp(1j * ((Q1 - ωa1) * t)), 0, torch.exp(1j * ((Q1 + ωa1) * t))],
-        [0, torch.exp(1j * ((-Q1 - ωa1) * t)), 0]
-    ], dtype=dtype) / math.sqrt(2)
-    S14A = kronN(e0, s14_mat, I2)
-
-    # S14C: control-field modulation
-    s14_mat_c = torch.tensor([
-        [0, torch.exp(1j * ((-Q1 + ω1) * -t)), 0],
-        [torch.exp(1j * ((Q1 - ω1) * -t)), 0, torch.exp(1j * ((Q1 + ω1) * -t))],
-        [0, torch.exp(1j * ((-Q1 - ω1) * -t)), 0]
-    ], dtype=dtype) / math.sqrt(2)
-    S14C = kronN(e1, s14_mat_c, I2)
-
-    # H4 & H5: interactions with nuclear spins
-    H4 = Ω_x * (γ1 * S14A + γ2 * (Ix3A * torch.cos(ωa2 * t) + Iy3A * torch.sin(ωa2 * t)))
-    H5 = Ω_x * (γ1 * S14C + γ2 * (
-        Ix3C * torch.cos(ω2 * t) +
-        Iy3C * torch.sin(ω2 * t) +
-        Iz3C * Θ2 * torch.sin(ϕ2)
-    ))
-
-    # Total Hamiltonian
-    H_total = H + H3 + H4 + H5
-
-    # Matrix exponential for unitary
-    U = torch.linalg.matrix_exp(-1j * H_total * dt)
-
-    return U
-
-
-
 
 
 def get_U(Ω, dt, t, Δ=0.0):
@@ -286,21 +224,21 @@ def get_U(Ω, dt, t, Δ=0.0):
     mod2 = Θ2 * (Iex3 * torch.cos(δ2 * t - ϕ2) + Iey3 * torch.sin(δ2 * t - ϕ2))
     H3 = -math.sqrt(2) * γ_e * Ω_e * kronN(mod1, mod2)
 
-    # S14A (electron in |0⟩) modulation
-    s14_mat = torch.tensor([
-        [0, torch.exp(1j * ((-Q1 + ωa1) * t)), 0],
-        [torch.exp(1j * ((Q1 - ωa1) * t)), 0, torch.exp(1j * ((Q1 + ωa1) * t))],
-        [0, torch.exp(1j * ((-Q1 - ωa1) * t)), 0]
-    ], dtype=dtype) / math.sqrt(2)
-    S14A = kronN(e0, s14_mat, I2)
-
-    # S14C (electron in |1⟩) modulation
+    # S14C (electron in |0⟩) modulation
     s14_mat_c = torch.tensor([
         [0, torch.exp(1j * ((-Q1 + ω1) * -t)), 0],
         [torch.exp(1j * ((Q1 - ω1) * -t)), 0, torch.exp(1j * ((Q1 + ω1) * -t))],
         [0, torch.exp(1j * ((-Q1 - ω1) * -t)), 0]
     ], dtype=dtype) / math.sqrt(2)
-    S14C = kronN(e1, s14_mat_c, I2)
+    S14C = kronN(e0, s14_mat_c, I2)
+
+    # S14A (electron in |1⟩) modulation
+    s14_mat = torch.tensor([
+        [0, torch.exp(1j * ((-Q1 + ωa1) * t)), 0],
+        [torch.exp(1j * ((Q1 - ωa1) * t)), 0, torch.exp(1j * ((Q1 + ωa1) * t))],
+        [0, torch.exp(1j * ((-Q1 - ωa1) * t)), 0]
+    ], dtype=dtype) / math.sqrt(2)
+    S14A = kronN(e1, s14_mat, I2)
 
     # H4 & H5 — interactions with nuclear spins (now scaled by Ω_n)
     H4 = Ω_n * (γ1 * S14A + γ2 * (Ix3A * torch.cos(ωa2 * t) + Iy3A * torch.sin(ωa2 * t)))

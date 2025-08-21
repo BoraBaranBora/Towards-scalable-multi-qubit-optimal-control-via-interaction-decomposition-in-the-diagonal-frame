@@ -26,17 +26,19 @@ from nelder_mead import call_initialization as nm_init, call_algo_step as nm_ste
 # -----------------------------
 # "What field amplitude gives me a 5 MHz Rabi frequency if each Tesla gives 175,929.1886 MHz of rotation?"
 #  in the case of the electron?"
-B_max = 5e6 / 175929.1886  # → ≈ 2.843e-5 Tesla: MHz/ MHz/Tesla
 
+Ω_rabi = 2 * np.pi * 15e6 # in(rad/s) because the simulation time is in seconds
+B_max = Ω_rabi / γ_e  # Units: (rad/s) / (rad/μs/T) = μT
+print(B_max)
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=4,
+        basis_size=5,
         maximal_pulse=B_max,               # Or total integral limit
-        maximal_amplitude=B_max/3,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
-        maximal_frequency=15 * np.pi * 1e6,
-        minimal_frequency=0,
-        maximal_phase=np.pi,
+        maximal_amplitude=B_max/2,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
+        maximal_frequency=35 * 2*np.pi * 1e6,
+        minimal_frequency=-35 * 2*np.pi * 1e6,
+        maximal_phase=10*np.pi,
         channel_type="MW"
     )
 ]
@@ -44,40 +46,87 @@ pulse_settings_list = [
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 210
-steps_per_ns = 10
+duration_ns = 330
+steps_per_ns = 10 # show mathematicallz why this is fine
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
 # -----------------------------
 # Step 3: Detuning Δ
 # -----------------------------
+#Λ_dict = {
+#    0: Λ00, 1: Λ01, 2: Λ00, 3: Λ01, 4: Λ00, 5: Λ01,
+#    6: Λ10, 7: Λ11, 8: Λ10, 9: Λ11, 10: Λ10, 11: Λ11
+#}
+
 Λ_dict = {
-    0: Λ00, 1: Λ01, 2: Λ00, 3: Λ01, 4: Λ00, 5: Λ01,
-    6: Λ10, 7: Λ11, 8: Λ10, 9: Λ11, 10: Λ10, 11: Λ11
+    0: Λ10,  1: Λ11,
+    2: Λ00,  3: Λ01,
+    4: Λm10, 5: Λm11,
+    6: Λ10,  7: Λ11,
+    8: Λ00,  9: Λ01,
+    10: Λm10, 11: Λm11
 }
+
 initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
 # Use the first pair to compute global Δ
-Δ = (Λ_dict[initial_target_pairs[0][1]] - Λ_s).item()
+#Δ = (Λ_dict[initial_target_pairs[0][1]] - Λ_s).item()
+Δ = (Λ_dict[2] - Λ_s).item()
+
 
 # -----------------------------
 # Step 4: Multi-State Preparation objective
 # -----------------------------
 objective_type = "Multi-State Preparation"  # or "Multi-State Preparation"
 
+
 if objective_type == "Gate Transformation":
-    #X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
-    #I = torch.eye(2, dtype=torch.complex128)
+    X = torch.tensor([[0,1],[1,0]], dtype=torch.complex128)
+    Y = torch.tensor([[0,-1j],[1j,0]], dtype=torch.complex128)
+    Z = torch.tensor([[1,0],[0,-1]], dtype=torch.complex128)
+    I = torch.eye(2, dtype=torch.complex128)
+
+    def kron3(a,b,c): return torch.kron(torch.kron(a,b), c)
+
+    # Projectors on B
+    P0 = (I + Z)/2  # |0><0|
+    P1 = (I - Z)/2  # |1><1|
+    P0_full = kron3(I, P0, I)
+    P1_full = kron3(I, P1, I)
+
+    # iSWAP(θ): exp(-i θ/2 (XX + YY)) on A–C.  θ=π/2 → iSWAP
+    theta = np.pi/2
+    H_XY_AC_full = kron3(X, I, X) + kron3(Y, I, Y)  # acts on A and C (B is spectator)
+    U_AC_full = torch.matrix_exp(-1j * (theta/2) * H_XY_AC_full)  # I_B ⊗ iSWAP_AC
+
+    # Controlled on B: |0><0|_B ⊗ I + |1><1|_B ⊗ iSWAP_AC
+    target_gate = P0_full + P1_full @ U_AC_full
+    objective_config = {"target_gate": target_gate}
+    
+if objective_type == "Gate Transformation":
+    X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
+    Y = torch.tensor([[0, -1j], [1j, 0]], dtype=torch.complex128)
+    Z = torch.tensor([[1, 0], [0, -1]], dtype=torch.complex128)
+    I = torch.eye(2, dtype=torch.complex128)
     #target_gate = torch.kron(torch.kron(X, I), I)
     #objective_config = {"target_gate": target_gate}
 
-    target_gate = ccz_gate()
+
+    Z = torch.tensor([[1, 0], [0, -1]], dtype=torch.complex128)
+    XZZ = torch.kron(torch.kron(X, Z), Z)
+    target_gate = torch.matrix_exp(-1j * (np.pi / 4) * XZZ) 
     objective_config = {"target_gate": target_gate}
+
+    #target_gate = ccz_gate()
+    #objective_config = {"target_gate": target_gate}
 
 
 elif objective_type == "Multi-State Preparation":
     initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+    #initial_target_pairs = [ (0, 0), (1, 7), (2, 2), (3, 9)]
+
     #initial_target_pairs = [(0, 6), (2, 8)]
     objective_config = {"initial_target_pairs": initial_target_pairs}
+
 
 elif objective_type == "Custom Phase Structure":
     objective_config = {"target_gate": None}  # no additional inputs needed
@@ -97,8 +146,8 @@ goal_fn = get_goal_function(
 # -----------------------------
 # Step 5: Load or Generate x0
 # -----------------------------
-use_previous = False
-resume_from = "results/pulse_2025-07-26_11-57-48"  # Path to previous result
+use_previous = True
+resume_from = "results/pulse_2025-07-26_20-33-48"  # Path to previous result
 
 if use_previous:
     try:
@@ -114,7 +163,7 @@ if use_previous:
         print(f"[WARN] Failed to load from {resume_from}: {e}")
         print("Falling back to random initial guess...")
         x0, f0 = get_initial_guess(
-            sample_size=30,
+            sample_size=50,
             goal_function=goal_fn,
             pulse_settings_list=pulse_settings_list
         )
@@ -122,7 +171,7 @@ if use_previous:
 else:
     # Generate a new random initial guess
     x0, f0 = get_initial_guess(
-        sample_size=30,
+        sample_size=50,
         goal_function=goal_fn,
         pulse_settings_list=pulse_settings_list
     )
@@ -132,14 +181,14 @@ else:
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 250
+iterations = 15
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=0.2
+        goal_fn, x0, pulse_settings_list, sigma_init=0.01
     )
     for _ in range(superiterations):
         for j in range(iterations):
@@ -247,6 +296,8 @@ plt.close()
 # -----------------------------
 # Plot: Population Transfers
 # -----------------------------
+initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+
 plt.figure(figsize=(8, 6))
 for init_idx, tgt_idx in initial_target_pairs:
     ψ0 = torch.zeros(12, dtype=torch.complex128)

@@ -22,6 +22,66 @@ def get_envelope_qb(time_grid, parameter_subset):
     return pulse
 
 
+
+
+
+
+def get_envelope_custom(time_grid, parameter_subset, alpha: float = 0.15):
+    """
+    Build a sum-of-cosines pulse and multiply by a Tukey window.
+
+    Args:
+        time_grid (torch.Tensor): 1-D tensor of times (assumed sorted).
+        parameter_subset (torch.Tensor): length 3*n vector [amplitudes, frequencies, phases].
+        alpha (float): Tukey taper fraction in [0, 1]. 0 -> rectangular, 1 -> Hann.
+
+    Returns:
+        torch.Tensor: windowed pulse (same shape as time_grid).
+    """
+    # unpack parameters
+    n = len(parameter_subset) // 3
+    amplitude = parameter_subset[:n]
+    frequency = parameter_subset[n:2 * n]
+    phases    = parameter_subset[2 * n:3 * n]
+
+    # build the raw sum-of-cosines pulse
+    pulse = torch.zeros_like(time_grid, dtype=torch.float64)
+    for i in range(n):
+        pulse = pulse + amplitude[i] * torch.cos(-frequency[i] * time_grid + phases[i])
+
+    # build normalized fractional time from 0 -> 1
+    t0, t1 = time_grid[0], time_grid[-1]
+    frac = (time_grid - t0) / (t1 - t0)
+    frac = torch.clamp(frac, 0.0, 1.0)
+
+    # Tukey window
+    if alpha <= 0.0:
+        window = torch.ones_like(frac)
+    elif alpha >= 1.0:
+        # alpha == 1 is identical to a Hann window
+        window = 0.5 * (1.0 - torch.cos(2.0 * math.pi * frac))
+    else:
+        window = torch.ones_like(frac)
+        left_end = alpha / 2.0
+        right_start = 1.0 - left_end
+
+        # left tapered region: 0 <= frac < alpha/2
+        left_mask = frac < left_end
+        if left_mask.any():
+            # arg runs from -pi -> 0
+            arg = (2.0 * math.pi / alpha) * (frac[left_mask] - left_end)
+            window[left_mask] = 0.5 * (1.0 + torch.cos(arg))
+
+        # right tapered region: 1-alpha/2 < frac <= 1
+        right_mask = frac > right_start
+        if right_mask.any():
+            # shift so arg runs from 0 -> pi
+            arg = (2.0 * math.pi / alpha) * (frac[right_mask] - right_start)
+            window[right_mask] = 0.5 * (1.0 + torch.cos(arg))
+
+    return pulse * window
+
+
 def get_envelope_custom(time_grid, parameter_subset):
     n = len(parameter_subset) // 3
     amplitude = parameter_subset[:n]
@@ -35,6 +95,26 @@ def get_envelope_custom(time_grid, parameter_subset):
 
     return pulse
 
+def get_envelope_custom(time_grid, parameter_subset):
+    # unpack parameters
+    n = len(parameter_subset) // 3
+    amplitude = parameter_subset[:n]
+    frequency = parameter_subset[n:2 * n]
+    phases    = parameter_subset[2 * n:3 * n]
+
+    # build the raw sum‐of‐cosines pulse
+    pulse = torch.zeros_like(time_grid, dtype=torch.float64)
+    for i in range(n):
+        pulse += amplitude[i] * torch.cos(-frequency[i] * time_grid + phases[i])
+
+    # now build a Hann window that is 0 at time_grid[0] and time_grid[-1]
+    t0, t1 = time_grid[0], time_grid[-1]
+    # (time_grid - t0) / (t1 - t0) runs from 0→1
+    frac = (time_grid - t0) / (t1 - t0)
+    window = 0.5 * (1.0 - torch.cos(2.0 * math.pi * frac))
+
+    # multiply your pulse by the window
+    return pulse * window
 
 def get_envelope_gaussian(time_grid, parameter_subset):
     n = len(parameter_subset) // 3
