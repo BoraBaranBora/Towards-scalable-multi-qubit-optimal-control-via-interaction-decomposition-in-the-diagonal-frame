@@ -255,3 +255,116 @@ def get_U(Ω, dt, t, Δ=0.0):
     U = torch.linalg.matrix_exp(-1j * H_total * dt)
 
     return U
+
+
+
+
+def get_U_RWA(
+    Ω, dt, t,
+    Δ_e=0.0,            # electron (MW) detuning: ω_MW - Λ_s
+    ω_RF=None,          # RF carrier frequency (single), used for nuclear pruning
+    detuning_cutoff=1e3 # keep S14 terms if |Ω - ω_RF| < cutoff (rad/s)
+):
+    """
+    RWA propagator aligned with the Report subsection:
+      1) Electron drive  -> H_e^(RWA)
+      2) Electron–nuclear modulation (H3) -> H_eN^(RWA)  (always kept)
+      3) Nuclear subspaces (aux/comput.)  -> S14C/S14A near ω_RF + RF transverse RWA
+      4) H_eff assembly and matrix exponential
+    """
+
+    # amplitudes
+    Ω_e0 = Ω[0]  # MW amplitude (consistent units)
+    Ω_n  = Ω[1]  # RF amplitude
+
+    # convenience
+    dev    = Ix1.device
+    _dtype = dtype
+    Δ_e = torch.tensor(Δ_e)
+
+    # ======================================================================
+    # 1) Electron drive: H_e^(RWA) with state-dependent detunings
+    # Build the 12-entry vector of Λ_ij in the same ordering as your diagonal
+    Λ_vec = torch.tensor(
+        [Λ10, Λ11, Λ00, Λ01, Λm10, Λm11] * 2,  # matches your original ordering/tiling
+        dtype=_dtype, device=dev
+    )
+
+    # MW frequency is (Λ_s + Δ_e); keep the difference term Λ_ij - (Λ_s + Δ_e)
+    Δe_vec = Λ_vec - (Λ_s + torch.as_tensor(Δ_e, dtype=_dtype, device=dev))
+
+    cos_vec = torch.cos(Δe_vec * t)
+    sin_vec = torch.sin(Δe_vec * t)
+
+    H_e_RWA = Ix1 @ torch.diag(cos_vec) - Iy1 @ torch.diag(sin_vec)
+    H_e_RWA = ((γ_e / math.sqrt(2)) * 0.5 * factor * Ω_e0) * H_e_RWA  # 1/2: co-rotating half
+
+    # ======================================================================
+    # 2) Electron–nuclear modulation: H_eN^(RWA)  (your H3, always kept)
+    #    sin(Λ_s t)·cos((Λ_s+Δ_e)t) -> 0.5 sin(Δ_e t)
+    #    cos(Λ_s t)·cos((Λ_s+Δ_e)t) -> 0.5 cos(Δ_e t)
+    mod1_slow = 0.5 * (qx * torch.sin(Δ_e * t) + qy * torch.cos(Δ_e * t))
+    mod2      = Θ2 * (Iex3 * torch.cos(δ2 * t - ϕ2) + Iey3 * torch.sin(δ2 * t - ϕ2))
+    H_eN_RWA  = -math.sqrt(2) * γ_e * (factor * Ω_e0) * kronN(mod1_slow, mod2)
+
+    # ======================================================================
+    # 3) Nuclear subspaces (auxiliary |0_e>, computational |-1_e>)
+    #    Keep only Fourier components of S14C/S14A near the single RF carrier ω_RF.
+    def _keep_phase(Ω_val):
+        """Return exp(i (Ω_val-ω_RF) t) if near ω_RF, else 0 (complex scalar)."""
+        if ω_RF is None:
+            return torch.exp(1j * (Ω_val * t))  # no pruning if RF not specified
+        δ = Ω_val - ω_RF
+        if abs(float(δ)) < detuning_cutoff:
+            return torch.exp(1j * (δ * t))
+        else:
+            return torch.zeros((), dtype=_dtype, device=dev)
+
+    # ---- S14C (electron in |0⟩)
+    # original phases had '-t' -> fold the minus into Ω_val definitions
+    Ωvals_C = {
+        (0,1): -( -Q1 + ω1 ),
+        (1,0): -(  Q1 - ω1 ),
+        (1,2): -(  Q1 + ω1 ),
+        (2,1): -( -Q1 - ω1 ),
+    }
+    s14c = torch.zeros((3,3), dtype=_dtype, device=dev)
+    for (i,j), Ωval in Ωvals_C.items():
+        s14c[i,j] = _keep_phase(Ωval)
+    s14c = s14c / math.sqrt(2)
+    S14C = kronN(e0, s14c, I2)
+
+    # ---- S14A (electron in |1⟩)
+    Ωvals_A = {
+        (0,1): ( -Q1 + ωa1 ),
+        (1,0): (  Q1 - ωa1 ),
+        (1,2): (  Q1 + ωa1 ),
+        (2,1): ( -Q1 - ωa1 ),
+    }
+    s14a = torch.zeros((3,3), dtype=_dtype, device=dev)
+    for (i,j), Ωval in Ωvals_A.items():
+        s14a[i,j] = _keep_phase(Ωval)
+    s14a = s14a / math.sqrt(2)
+    S14A = kronN(e1, s14a, I2)
+
+    # RF transverse terms under RWA:
+    # Ω_n [Ix cos(ω t) + Iy sin(ω t)] -> (Ω_n/2)[Ix cos(δ t) + Iy sin(δ t)], δ = ω - ω_RF
+    δ_n1 = (ωa2 - ω_RF) if (ω_RF is not None) else ωa2
+    δ_n2 = (ω2  - ω_RF) if (ω_RF is not None) else ω2
+
+    H_aux_RWA = Ω_n * (
+        γ1 * S14A
+        + (γ2 * 0.5) * ( Ix3A * torch.cos(δ_n1 * t) + Iy3A * torch.sin(δ_n1 * t) )
+    )
+
+    H_comp_RWA = Ω_n * (
+        γ1 * S14C
+        + (γ2 * 0.5) * ( Ix3C * torch.cos(δ_n2 * t) + Iy3C * torch.sin(δ_n2 * t) )
+        + γ2 * ( Iz3C * Θ2 * torch.sin(ϕ2) )  # static term survives
+    )
+
+    # ======================================================================
+    # 4) Assemble H_NV^(RWA) and propagate
+    H_eff = H_e_RWA + H_eN_RWA + H_aux_RWA + H_comp_RWA
+    U = torch.linalg.matrix_exp(-1j * H_eff * dt)
+    return U
