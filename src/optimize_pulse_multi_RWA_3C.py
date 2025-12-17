@@ -6,9 +6,14 @@ from pathlib import Path
 
 from pulse_settings import PulseSettings, get_initial_guess
 from get_drive import get_drive
-from objective_functions import get_goal_function
+from objective_functions import get_goal_function, make_three_qubit_basis_indices, make_four_qubit_basis_indices
 from evolution import get_time_grid, get_evolution_vector
-from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
+#from quantum_model import get_U_RWA, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, ω1, ω2, γ_e
+
+from quantum_model_3C import (
+    get_U_RWA, dtype, Λ_s, γ_e, ω1, B_0, γ_n, Azz_n, A_ort_n,
+    set_active_carbons, get_active_carbons, get_precomp, detuning_for_target_all_up
+)
 
 from custom_gates import ccz_gate  # or wherever you defined it
 
@@ -21,57 +26,112 @@ from cma_runner import (
 from nelder_mead import call_initialization as nm_init, call_algo_step as nm_step
 
 
+
+from quantum_model_3C import set_active_carbons, get_precomp
+# choose how many carbons participate in the model
+set_active_carbons([1,2,3])    # the Hamiltonian uses these 4; others ignored
+
+
+print("Active carbons:", get_active_carbons())
+pc = get_precomp()
+print("dim_nuc per e-manifold =", pc["dim_nuc"], " (should be 3 * 2^N_C )")
+
+# pick which three carbons form your logical B,C,D
+basis_indices = make_four_qubit_basis_indices(
+    carbon_triple=(1,2,3), # e.g., use carbons with indices 1 and 3 from your parameter arrays
+    mI_block=0, # fix 14N to +1
+    electron_map=('m1','0'),   # A=0→|-1_e>, A=1→|0_e>
+)
+
+
+
+def nconf_from_pc(pc=pc):
+    # number of carbon configurations = 2^N_C
+    return 2 ** int(pc['N_C'])
+
+def dim_from_pc(pc=pc):
+    return 2 * 3 * nconf_from_pc(pc)  # 2 (electron) * 3 (14N) * 2^N_C
+
+def basis_index(e_manifold: int, mI_block: int, c_bits: int, pc=pc) -> int:
+    """
+    e_manifold: 0 for |0_e> (aux), 1 for |-1_e> (comp)
+    mI_block:   0:+1, 1:0, 2:-1
+    c_bits:     integer 0..(2^N_C-1), bitstring of all carbons (0=↑, 1=↓)
+    """
+    nconf = nconf_from_pc(pc)
+    dim_nuc = 3 * nconf
+    offset_e = 0 if e_manifold == 0 else dim_nuc
+    return offset_e + mI_block * nconf + c_bits
+
+def Lambda_target(mI_block: int, c_bits: int, pc=pc):
+    """
+    Return Λ_target (rad/s) for a nuclear config (14N block, carbon bitstring).
+    This is the Λ used inside H_e^(RWA) for the addressed nuclear state.
+    """
+    nconf = nconf_from_pc(pc)
+    idx_nuc = mI_block * nconf + c_bits
+    return pc['Λ_nuc'][idx_nuc]  # (rad/s)
+
+def Delta_e_for(mI_block: int, c_bits: int, pc=pc):
+    """Δ_e = Λ_target - Λ_s for the selected nuclear configuration."""
+    return float(Lambda_target(mI_block, c_bits, pc) - Λ_s)
+
+
 # -----------------------------
 # Step 1: Define pulse settings
 # -----------------------------
 # "What field amplitude gives me a 5 MHz Rabi frequency if each Tesla gives 175,929.1886 MHz of rotation?"
 #  in the case of the electron?"
 
-Ω_rabi = 2 * np.pi * 10e6 # in(rad/s) because the simulation time is in seconds
+Ω_rabi = 2 * np.pi * 5e6 # in(rad/s) because the simulation time is in seconds
 B_max = Ω_rabi / γ_e  # Units: (rad/s) / (rad/μs/T) = μT
 print(B_max)
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=8,
+        basis_size=16,
         maximal_pulse=B_max,               # Or total integral limit
-        maximal_amplitude=B_max/4,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
-        maximal_frequency=20 * 2*np.pi * 1e6,
-        minimal_frequency=-0 * 2*np.pi * 1e6,
-        maximal_phase=1*np.pi,
+        maximal_amplitude=B_max/16,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
+        maximal_frequency=2 * 2*np.pi * 1e6,
+        minimal_frequency=-2 * 2*np.pi * 1e6,
+        maximal_phase=10*np.pi,
         channel_type="MW"
     )
 ]
 
+#kohlenstoff carbon 50khZ
+
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 340
-steps_per_ns = 10 # show mathematicallz why this is fine
+duration_ns = 1500
+steps_per_ns = 1 # show mathematicallz why this is fine
 time_grid = get_time_grid(duration_ns, steps_per_ns)
+
 
 # -----------------------------
 # Step 3: Detuning Δ
 # -----------------------------
-#Λ_dict = {
-#    0: Λ00, 1: Λ01, 2: Λ00, 3: Λ01, 4: Λ00, 5: Λ01,
-#    6: Λ10, 7: Λ11, 8: Λ10, 9: Λ11, 10: Λ10, 11: Λ11
-#}
 
-Λ_dict = {
-    0: Λ10,  1: Λ11,
-    2: Λ00,  3: Λ01,
-    4: Λm10, 5: Λm11,
-    6: Λ10,  7: Λ11,
-    8: Λ00,  9: Λ01,
-    10: Λm10, 11: Λm11
-}
+# choose the addressed nuclear configuration
+mI_block = 0         # 14N = +1
+c_bits   = 0         # all carbons ↑ (bitstring 000…0)
 
-initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
-# Use the first pair to compute global Δ
-#Δ = (Λ_dict[initial_target_pairs[0][1]] - Λ_s).item()
-Δ = (Λ_dict[0] - Λ_s).item() # usually 2
+# initial/target (flip only the electron, same nuclear config)
+initial_index = basis_index(e_manifold=1, mI_block=mI_block, c_bits=c_bits, pc=pc)  # |-1_e, mI=+1, C=↑…↑
+target_index  = basis_index(e_manifold=0, mI_block=mI_block, c_bits=c_bits, pc=pc)  # |0_e,  mI=+1, C=↑…↑
 
+# global electron detuning to park the MW drive on that transition
+Δ_e  = Delta_e_for(mI_block, c_bits, pc=pc)   # rad/s
+ω_RF = ω1                                       # your single RF carrier (still fine)
+
+# same nuclear block, but sweep a few carbon configurations if you want:
+nconf = nconf_from_pc(pc)
+# example: first four carbon configs 0..3 (↑↑↑…, ↑↑…↓, …)
+initial_target_pairs = [
+    (basis_index(1, mI_block, cb, pc), basis_index(0, mI_block, cb, pc))
+    for cb in range(min(4, nconf))
+]
 
 # -----------------------------
 # Step 4: Multi-State Preparation objective
@@ -79,42 +139,25 @@ initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
 objective_type = "Gate Transformation"  # or "Multi-State Preparation"
 
 
+    # Aim: genuine 4-body ZZZZ phase of π/4 with no residual 2- or 3-body terms
+
+
+
 if objective_type == "Gate Transformation":
-    X = torch.tensor([[0,1],[1,0]], dtype=torch.complex128)
-    Y = torch.tensor([[0,-1j],[1j,0]], dtype=torch.complex128)
-    Z = torch.tensor([[1,0],[0,-1]], dtype=torch.complex128)
-    I = torch.eye(2, dtype=torch.complex128)
-
-    def kron3(a,b,c): return torch.kron(torch.kron(a,b), c)
-
-    # Projectors on B
-    P0 = (I + Z)/2  # |0><0|
-    P1 = (I - Z)/2  # |1><1|
-    P0_full = kron3(I, P0, I)
-    P1_full = kron3(I, P1, I)
-
-    # iSWAP(θ): exp(-i θ/2 (XX + YY)) on A–C.  θ=π/2 → iSWAP
-    theta = np.pi/2
-    H_XY_AC_full = kron3(X, I, X) + kron3(Y, I, Y)  # acts on A and C (B is spectator)
-    U_AC_full = torch.matrix_exp(-1j * (theta/2) * H_XY_AC_full)  # I_B ⊗ iSWAP_AC
-
-    # Controlled on B: |0><0|_B ⊗ I + |1><1|_B ⊗ iSWAP_AC
-    target_gate = P0_full + P1_full @ U_AC_full
-    objective_config = {"target_gate": target_gate}
-    
-if objective_type == "Gate Transformation":
-    X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
-    Y = torch.tensor([[0, -1j], [1j, 0]], dtype=torch.complex128)
-    Z = torch.tensor([[1, 0], [0, -1]], dtype=torch.complex128)
-    I = torch.eye(2, dtype=torch.complex128)
-    #target_gate = torch.kron(torch.kron(X, I), I)
-    #objective_config = {"target_gate": target_gate}
-
-
-    Z = torch.tensor([[1, 0], [0, -1]], dtype=torch.complex128)
-    XZZ = torch.kron(torch.kron(X, Z), Z)
-    target_gate = torch.matrix_exp(-1j * (np.pi / 4) * XZZ) 
-    objective_config = {"target_gate": target_gate}
+    target_gate = torch.eye(16, dtype=torch.complex128)
+    objective_config = {"target_gate": target_gate,
+                         "basis_indices": basis_indices,
+                             # Aim: genuine 4-body ZZZZ phase of π/4 with no residual 2- or 3-body terms
+                         "target_4q": {"c1234": np.pi/4,  
+                                        "c12": 0.0, "c13": 0.0, "c14": 0.0, "c23": 0.0, "c24": 0.0, "c34": 0.0,
+                                        "c123": 0.0, "c124": 0.0, "c134": 0.0, "c234": 0.0,
+                                    },
+                         "weights_4q": {"c1234": 0.7,
+                                        # push these down strongly to suppress residues
+                                        "c12": 0.2, "c13": 0.2, "c14": 0.2, "c23": 0.2, "c24": 0.2, "c34": 0.2,
+                                        "c123": 0.5, "c124": 0.5, "c134": 0.5, "c234": 0.5,
+                                    },
+    }
 
     #target_gate = ccz_gate()
     #objective_config = {"target_gate": target_gate}
@@ -135,7 +178,7 @@ else:
     raise ValueError(f"Unsupported objective type: {objective_type}")
 
 goal_fn = get_goal_function(
-    get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+    get_u=lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e=Δ_e, ω_RF=ω1),
     objective_type=objective_type,
     time_grid=time_grid,
     pulse_settings_list=pulse_settings_list,
@@ -146,8 +189,8 @@ goal_fn = get_goal_function(
 # -----------------------------
 # Step 5: Load or Generate x0
 # -----------------------------
-use_previous = True
-resume_from = "results/pulse_2025-08-28_13-27-32"  # Path to previous result
+use_previous = False
+resume_from = "results/pulse_2025-10-21_13-53-12"#"results/pulse_2025-09-02_10-30-53"  # Path to previous result
 sample_size = 50
 
 if use_previous:
@@ -178,18 +221,26 @@ else:
     )
     print(f"Generated new initial guess: FoM = {f0:.6e}")
 
+
+# quick probe: make sure get_u returns a square matrix and print its size
+#dt0 = (time_grid[1] - time_grid[0]).item()
+#t0  = time_grid[0].item()
+#U0  = (lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e=Δ_e, ω_RF=ω1))(
+#        [d[0] for d in get_drive(time_grid, x0, pulse_settings_list)], dt0, t0)
+#print("Model dim:", U0.shape)  # expect torch.Size([96,96]) for N_C=4
+
 # -----------------------------
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 30
+iterations = 200
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=0.02
+        goal_fn, x0, pulse_settings_list, sigma_init=0.005
     )
     for _ in range(superiterations):
         for j in range(iterations):
@@ -233,6 +284,7 @@ elif algo_type == "Nelder Mead":
 
 else:
     raise ValueError(f"Unsupported algorithm: {algo_type}")
+
 # -----------------------------
 # Step 7–8: Save and visualize
 # -----------------------------
@@ -252,7 +304,7 @@ checkpoint = {
     "fom": f_opt,
     "time_grid": time_grid,
     "pulse_settings": pulse_settings_list,
-    "Δ": Δ,
+    "Δ": Δ_e,
     "drive": optimized_drive,
     "timestamp": timestamp,
     "objective_type": objective_type,
@@ -267,12 +319,19 @@ with open(result_dir / "best_fom.txt", "w") as f:
 
 # Compute final propagator and save it
 from evolution import get_propagator
-propagator = get_propagator(lambda Ω, dt, t: get_U(Ω, dt, t, Δ), time_grid, optimized_drive)
+propagator = get_propagator(lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e), time_grid, optimized_drive)
 torch.save(propagator, result_dir / "optimized_propagator.pt")
 
 # Project into computational subspace
-basis_indices = [0, 1, 2, 3, 6, 7, 8, 9]
-P = torch.zeros((len(basis_indices), 12), dtype=torch.complex128)
+#basis_indices = [0, 1, 2, 3, 6, 7, 8, 9]
+#P = torch.zeros((len(basis_indices), 2*3*2**(len(get_active_carbons()))), dtype=torch.complex128)
+#for i, idx in enumerate(basis_indices):
+#    P[i, idx] = 1.0
+
+#propagator_projected = P @ propagator @ P.T
+#torch.save(propagator_projected, result_dir / "propagator_projected.pt")
+
+P = torch.zeros((len(basis_indices), 2*3*2**(len(get_active_carbons()))), dtype=torch.complex128)
 for i, idx in enumerate(basis_indices):
     P[i, idx] = 1.0
 
@@ -287,7 +346,7 @@ for i, d in enumerate(optimized_drive):
     plt.plot(time_grid.numpy() * 1e9, d.numpy(), label=f"Drive {i+1}")
 plt.xlabel("Time (ns)")
 plt.ylabel("Drive Amplitude")
-plt.title("Optimized Control Drives")
+plt.title("Optimized Control Pulses")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
@@ -297,15 +356,15 @@ plt.close()
 # -----------------------------
 # Plot: Population Transfers
 # -----------------------------
-initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+#initial_target_pairs = [(6, 0), (7, 1), (8, 2), (9, 3)]
 
 plt.figure(figsize=(8, 6))
 for init_idx, tgt_idx in initial_target_pairs:
-    ψ0 = torch.zeros(12, dtype=torch.complex128)
+    ψ0 = torch.zeros(2*3*2**(len(get_active_carbons())), dtype=torch.complex128)
     ψ0[init_idx] = 1.0
 
     states = get_evolution_vector(
-        lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+        lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e),
         time_grid,
         optimized_drive,
         ψ0

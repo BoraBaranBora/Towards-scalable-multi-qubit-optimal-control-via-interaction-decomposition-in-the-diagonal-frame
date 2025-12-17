@@ -8,7 +8,7 @@ from pulse_settings import PulseSettings, get_initial_guess
 from get_drive import get_drive
 from objective_functions import get_goal_function
 from evolution import get_time_grid, get_evolution_vector
-from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
+from quantum_model import get_U_RWA, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, ω1, ω2, γ_e
 
 from custom_gates import ccz_gate  # or wherever you defined it
 
@@ -33,7 +33,7 @@ print(B_max)
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=8,
+        basis_size=6,
         maximal_pulse=B_max,               # Or total integral limit
         maximal_amplitude=B_max/4,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
         maximal_frequency=20 * 2*np.pi * 1e6,
@@ -43,11 +43,13 @@ pulse_settings_list = [
     )
 ]
 
+#kohlenstoff carbon 50khZ
+
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
 duration_ns = 340
-steps_per_ns = 10 # show mathematicallz why this is fine
+steps_per_ns = 2 # show mathematicallz why this is fine
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
 # -----------------------------
@@ -59,19 +61,21 @@ time_grid = get_time_grid(duration_ns, steps_per_ns)
 #}
 
 Λ_dict = {
-    0: Λ10,  1: Λ11,
+    0: Λ10 #logically:100
+    ,  1: Λ11,
     2: Λ00,  3: Λ01,
     4: Λm10, 5: Λm11,
-    6: Λ10,  7: Λ11,
+    6: Λ10#logically:000
+    ,  7: Λ11,
     8: Λ00,  9: Λ01,
     10: Λm10, 11: Λm11
 }
 
-initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+initial_target_pairs = [(6, 0), (7, 1), (8, 2), (9, 3)]
 # Use the first pair to compute global Δ
 #Δ = (Λ_dict[initial_target_pairs[0][1]] - Λ_s).item()
-Δ = (Λ_dict[0] - Λ_s).item() # usually 2
-
+Δ_e = (Λ_dict[0] - Λ_s).item() # usually 2
+ω_RF = ω1
 
 # -----------------------------
 # Step 4: Multi-State Preparation objective
@@ -135,7 +139,7 @@ else:
     raise ValueError(f"Unsupported objective type: {objective_type}")
 
 goal_fn = get_goal_function(
-    get_u=lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+    get_u=lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e=Δ_e, ω_RF=ω1),
     objective_type=objective_type,
     time_grid=time_grid,
     pulse_settings_list=pulse_settings_list,
@@ -146,8 +150,8 @@ goal_fn = get_goal_function(
 # -----------------------------
 # Step 5: Load or Generate x0
 # -----------------------------
-use_previous = True
-resume_from = "results/pulse_2025-08-28_13-27-32"  # Path to previous result
+use_previous = False
+resume_from ="results/pulse_2025-09-26_15-02-23"  # Path to previous result
 sample_size = 50
 
 if use_previous:
@@ -182,14 +186,14 @@ else:
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 30
+iterations = 100
 superiterations = 1
 log = True
 verbose = True
 
 if algo_type == "CMA-ES":
     es, solutions_norm, values, scale = initialize_cmaes(
-        goal_fn, x0, pulse_settings_list, sigma_init=0.02
+        goal_fn, x0, pulse_settings_list, sigma_init=0.01
     )
     for _ in range(superiterations):
         for j in range(iterations):
@@ -252,7 +256,7 @@ checkpoint = {
     "fom": f_opt,
     "time_grid": time_grid,
     "pulse_settings": pulse_settings_list,
-    "Δ": Δ,
+    "Δ": Δ_e,
     "drive": optimized_drive,
     "timestamp": timestamp,
     "objective_type": objective_type,
@@ -267,7 +271,7 @@ with open(result_dir / "best_fom.txt", "w") as f:
 
 # Compute final propagator and save it
 from evolution import get_propagator
-propagator = get_propagator(lambda Ω, dt, t: get_U(Ω, dt, t, Δ), time_grid, optimized_drive)
+propagator = get_propagator(lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e), time_grid, optimized_drive)
 torch.save(propagator, result_dir / "optimized_propagator.pt")
 
 # Project into computational subspace
@@ -287,7 +291,7 @@ for i, d in enumerate(optimized_drive):
     plt.plot(time_grid.numpy() * 1e9, d.numpy(), label=f"Drive {i+1}")
 plt.xlabel("Time (ns)")
 plt.ylabel("Drive Amplitude")
-plt.title("Optimized Control Drives")
+plt.title("Optimized Control Pulses")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
@@ -297,7 +301,7 @@ plt.close()
 # -----------------------------
 # Plot: Population Transfers
 # -----------------------------
-initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+initial_target_pairs = [(6, 0), (7, 1), (8, 2), (9, 3)]
 
 plt.figure(figsize=(8, 6))
 for init_idx, tgt_idx in initial_target_pairs:
@@ -305,7 +309,7 @@ for init_idx, tgt_idx in initial_target_pairs:
     ψ0[init_idx] = 1.0
 
     states = get_evolution_vector(
-        lambda Ω, dt, t: get_U(Ω, dt, t, Δ),
+        lambda Ω, dt, t: get_U_RWA(Ω, dt, t, Δ_e),
         time_grid,
         optimized_drive,
         ψ0

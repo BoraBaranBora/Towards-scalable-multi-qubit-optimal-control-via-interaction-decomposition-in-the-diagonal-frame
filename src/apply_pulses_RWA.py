@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from get_drive import get_drive
-from quantum_model import get_U
+from quantum_model import get_U_RWA
 from quantum_operators import pauli_operator_on_qubit
-from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
+from quantum_model import get_U_RWA, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_e
 
 
 
@@ -16,30 +16,21 @@ from quantum_model import get_U, Λ_s, Λ00, Λ01, Λ10, Λ11, Λm10, Λm11, γ_
 # Utility functions
 # -----------------------------
 
-def apply_pulse(get_U, time_grid, drive, ψ_init, Δ):
+def apply_pulse(get_U_RWA, time_grid, drive, ψ_init, Δ):
     states = [ψ_init]
     for i in range(len(time_grid)):
         dt = time_grid[1] - time_grid[0]
         Ω = [d[i] for d in drive]
-        U = get_U(Ω, dt.item(), time_grid[i].item(), Δ)
+        U = get_U_RWA(Ω, dt.item(), time_grid[i].item(), Δ)
         ψ_next = U @ states[-1]
         states.append(ψ_next)
     return torch.stack(states)
 
-def apply_sequence(get_U, time_grid, drive_list, ψ_init, Δ):
-    ψ = ψ_init
-    all_states = []
-    for drive in drive_list:
-        states = apply_pulse(get_U, time_grid, drive, ψ, Δ)
-        all_states.append(states)
-        ψ = states[-1]
-    return all_states
-
-def apply_sequence(get_U, time_grids, drive_list, ψ_init, Δ):
+def apply_sequence(get_U_RWA, time_grids, drive_list, ψ_init, Δ):
     ψ = ψ_init
     all_states = []
     for drive, tg in zip(drive_list, time_grids):
-        states = apply_pulse(get_U, tg, drive, ψ, Δ)
+        states = apply_pulse(get_U_RWA, tg, drive, ψ, Δ)
         all_states.append(states)
         ψ = states[-1]
     return all_states
@@ -148,9 +139,14 @@ pulse_dirs = [
     #Path("results/pulse_2025-07-26_20-33-48"), # matthias geschickt, 4 times this should be a CZ like entangler between 2 and 3, up to local z phases
 
 
-    Path("results/pulse_2025-08-28_13-27-32") # CZ on AC 340mus
+    #Path("results/pulse_2025-08-28_13-27-32") # CZ on AC 340mus
     #Path("results/pulse_2025-08-28_14-12-38") # CZ on AC 400mus
 
+
+    Path("results/pulse_2025-09-01_20-41-14") # CZ on AC 340mus with RWA
+
+    #Path("results/pulse_2025-09-23_13-52-44") # CZ on AC 340mus with RWA
+    #Path("results/pulse_2025-09-23_14-25-46") # CZ on AC 340mus with RWA
 
 
 
@@ -174,7 +170,7 @@ for path in pulse_dirs:
 # Use Δ and time grid from first pulse
 ckpt_main = torch.load(pulse_dirs[0] / "pulse_solution.pt", weights_only=False)
 #Δ = ckpt_main["Δ"]
-Δ = (Λ00 - Λ_s).item() # 11'e goyduysan 00' gerekli durumu ceviriy
+Δ = (Λ10 - Λ_s).item() # 11'e goyduysan 00' gerekli durumu ceviriy
 time_grid = ckpt_main["time_grid"]
 dt = (time_grid[1] - time_grid[0]).item()
 total_steps = (len(time_grid) + 1) * len(pulse_sequence)
@@ -185,8 +181,8 @@ time_axis = np.linspace(0, dt * (total_steps - 1), total_steps) * 1e9
 # -----------------------------
 ψ0 = torch.zeros(12, dtype=torch.complex128)
 ψ0[0] = 1.0
-#states_sequence = apply_sequence(get_U, time_grid, pulse_sequence, ψ0, Δ)
-states_sequence = apply_sequence(get_U, time_grids, pulse_sequence, ψ0, Δ)
+#states_sequence = apply_sequence(get_U_RWA, time_grid, pulse_sequence, ψ0, Δ)
+states_sequence = apply_sequence(get_U_RWA, time_grids, pulse_sequence, ψ0, Δ)
 states_concat = torch.cat(states_sequence, dim=0)
 
 # -----------------------------
@@ -196,12 +192,12 @@ output_dir = pulse_dirs[-1]  # Save plots in last pulse folder
 print(f"Saving analysis to: {output_dir}")
 
 
-def plot_population_transfers(get_U, time_grid, drive, Δ, initial_target_pairs, save_path, filename="multi_state_populations.png"):
+def plot_population_transfers(get_U_RWA, time_grid, drive, Δ, initial_target_pairs, save_path, filename="multi_state_populations.png"):
     """
     Plots population transfer from specified initial states to target states.
 
     Args:
-        get_U: function(Ω, dt, t, Δ) → unitary operator
+        get_U_RWA: function(Ω, dt, t, Δ) → unitary operator
         time_grid: 1D tensor of time steps
         drive: list of drive signals (usually from checkpoint)
         Δ: detuning parameter
@@ -215,7 +211,7 @@ def plot_population_transfers(get_U, time_grid, drive, Δ, initial_target_pairs,
         ψ0[init_idx] = 1.0
 
         # Evolve using the same logic as apply_pulse
-        states = apply_pulse(get_U, time_grid, drive, ψ0, Δ)
+        states = apply_pulse(get_U_RWA, time_grid, drive, ψ0, Δ)
         pop = torch.stack([torch.abs(s)**2 for s in states]).numpy()
         #plt.plot(time_grid.numpy() * 1e9, pop[:, tgt_idx], label=f"{init_idx} → {tgt_idx}")
         dt = (time_grid[1] - time_grid[0]).item()
@@ -233,11 +229,11 @@ def plot_population_transfers(get_U, time_grid, drive, Δ, initial_target_pairs,
 
 
     # Define pairs of interest
-initial_target_pairs = [(0, 6), (1, 7), (2, 8), (3, 9)]
+initial_target_pairs = [(6, 0), (7, 1), (8, 2), (9, 3)]
 
 # Use one of the pulse drives (e.g., first one) for demonstration
 plot_population_transfers(
-    get_U=get_U,
+    get_U_RWA=get_U_RWA,
     time_grid=time_grids[0],
     drive=pulse_sequence[0],
     Δ=Δ,
@@ -439,7 +435,7 @@ def create_plus_state_in_12d(basis_indices=[0,1,2,3,6,7,8,9]):
 
 ψ0 = create_plus_state_in_12d()
 
-states_sequence = apply_sequence(get_U, time_grids, pulse_sequence, ψ0, Δ)
+states_sequence = apply_sequence(get_U_RWA, time_grids, pulse_sequence, ψ0, Δ)
 states_concat = torch.cat(states_sequence, dim=0)
 plot_bloch_trajectories_3d(states_concat, save_path=output_dir)
 

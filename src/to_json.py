@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ======= Set your path here (file OR directory) =======
-TARGET_PATH = "results/pulse_2025-08-21_10-28-42/propagator_projected.pt"
+TARGET_PATH = "results/pulse_2025-12-16_15-07-43/propagator_projected.pt"
 PRETTY = True
 WEIGHTS_ONLY = False
 # ======================================================
