@@ -55,7 +55,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GATE_CONFIGS = {
     "diagonal": {
         "label": "diagonal (ZZZ)",
-        "pulse_dir": PROJECT_ROOT / "results" / "pulse_2025-12-15_14-18-53",
+        "pulse_dir": PROJECT_ROOT / "results_paper" / "pulse_2025-12-15_14-18-53",
         "fig_subdir": PROJECT_ROOT / "figs" / "diagonal",
         "target_line": -np.pi * 3/4,
         "target_label": r"$-3\pi/4$",
@@ -67,7 +67,7 @@ GATE_CONFIGS = {
     },
     "nondiagonal": {
         "label": "non-diagonal (XZZ)",
-        "pulse_dir": PROJECT_ROOT / "results" / "pulse_2025-12-17_14-44-22",
+        "pulse_dir": PROJECT_ROOT / "results_paper" / "pulse_2025-12-17_14-44-22",
         "fig_subdir": PROJECT_ROOT / "figs" / "nondiagonal",
         "target_line": np.pi * 1/4,
         "target_label": r"$\pi/4$",
