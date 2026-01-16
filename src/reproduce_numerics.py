@@ -55,7 +55,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GATE_CONFIGS = {
     "diagonal": {
         "label": "diagonal (ZZZ)",
-        "pulse_dir": PROJECT_ROOT / "results_paper" / "pulse_2025-12-15_14-18-53",
+        "pulse_dir": PROJECT_ROOT / "results_paper" / "pulse_diagonal",
         "fig_subdir": PROJECT_ROOT / "figs" / "diagonal",
         "target_line": -np.pi * 3/4,
         "target_label": r"$-3\pi/4$",
@@ -67,7 +67,7 @@ GATE_CONFIGS = {
     },
     "nondiagonal": {
         "label": "non-diagonal (XZZ)",
-        "pulse_dir": PROJECT_ROOT / "results_paper" / "pulse_2025-12-17_14-44-22",
+        "pulse_dir": PROJECT_ROOT / "results_paper" / "pulse_nondiagonal",
         "fig_subdir": PROJECT_ROOT / "figs" / "nondiagonal",
         "target_line": np.pi * 1/4,
         "target_label": r"$\pi/4$",
@@ -92,7 +92,7 @@ def run_demo(gate_key: str):
     # ---------------------------------------------------------------------
     # 1) Hamiltonian setup and checkpoint loading
     # ---------------------------------------------------------------------
-    set_active_carbons([1, 2])  # same as in optimization scripts
+    set_active_carbons([1, 2])  
     pc = get_precomp()
     N_C = int(pc["N_C"])
     D = 2 * 3 * (2 ** N_C)
@@ -112,7 +112,7 @@ def run_demo(gate_key: str):
     # ---------------------------------------------------------------------
     # 2) Build multi-qubit projector and indices
     # ---------------------------------------------------------------------
-    n14_pair = (0, 1)
+    n14_pair = (0, 1) # choosing the qubit
     electron_map = ('m1', '0')
     basis_indices_multi, qubit_names = make_multi_qubit_basis_indices(
         pc, n14_pair=n14_pair, electron_map=electron_map
