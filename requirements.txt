@@ -1,0 +1,5 @@
+numpy>=1.23,<2.0
+scipy>=1.9,<2.0
+matplotlib>=3.6,<4.0
+torch>=2.0,<3.0
+qiskit>=0.44,<1.0
