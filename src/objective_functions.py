@@ -2599,8 +2599,8 @@ def FoM_gate_transformation(
             w_k = torch.as_tensor(weights_3q.get(k, 1.0), dtype=torch.float64, device=U_actual.device)
 
             # cos is 2π-periodic anyway, no need for abs
-            diff = inv3[k] - target_k
-            #diff = _wrap_pm_pi(inv3[k] - torch.as_tensor(t, dtype=torch.float64, device=U_actual.device))
+            #diff = inv3[k] - target_k
+            diff = _wrap_pm_pi(inv3[k] - torch.as_tensor(t, dtype=torch.float64, device=U_actual.device))
 
             L_3q = L_3q + w_k * (1.0 - torch.cos(1*diff))
 
@@ -2616,7 +2616,7 @@ def FoM_gate_transformation(
     #        L_pairclose = 1.0 - torch.cos(dclose)
 
 
-        cost =   w_off * offdiag_penalty + w_3q * L_3q + w_u * unitarity_loss + 1e-1 * primal_value #+ 0.4* L_3q2 #+ w_pairclose*L_pairclose
+        cost =   w_off * offdiag_penalty + w_3q * L_3q + w_u * unitarity_loss + 0e-1 * primal_value #+ 0.4* L_3q2 #+ w_pairclose*L_pairclose
     return cost
 
 # here ends the gradient based
@@ -2970,7 +2970,7 @@ def block_offdiag_penalty_simple_nondiag(
 
 # --- FoM for XZZ-like target in rotated frame ---------------------------------
 
-def FoM_gate_transformation(
+def FoM_gate_transformationgrad(
     get_u: Callable,
     time_grid,
     parameter_set,
@@ -3188,7 +3188,7 @@ def unitarity_penalty_4q(U_full: torch.Tensor, basis_idx) -> torch.Tensor:
     return (diff.abs()**2).sum().real / 16.0
 
 
-def FoM_gate_transformation4q(
+def FoM_gate_transformation(
     get_u: Callable,
     time_grid,
     parameter_set,

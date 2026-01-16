@@ -29,7 +29,7 @@ from nelder_mead import call_initialization as nm_init, call_algo_step as nm_ste
 
 from quantum_model_3C import set_active_carbons, get_precomp
 # choose how many carbons participate in the model
-set_active_carbons([1,2,3])    # the Hamiltonian uses these 4; others ignored
+set_active_carbons([1,3,4])    # the Hamiltonian uses these 4; others ignored
 
 
 print("Active carbons:", get_active_carbons())
@@ -38,7 +38,7 @@ print("dim_nuc per e-manifold =", pc["dim_nuc"], " (should be 3 * 2^N_C )")
 
 # pick which three carbons form your logical B,C,D
 basis_indices = make_four_qubit_basis_indices(
-    carbon_triple=(1,2,3), # e.g., use carbons with indices 1 and 3 from your parameter arrays
+    carbon_triple=(1,3,4), # e.g., use carbons with indices 1 and 3 from your parameter arrays
     mI_block=0, # fix 14N to +1
     electron_map=('m1','0'),   # A=0→|-1_e>, A=1→|0_e>
 )
@@ -89,12 +89,12 @@ print(B_max)
 pulse_settings_list = [
     PulseSettings(
         basis_type="Custom",
-        basis_size=16,
+        basis_size=11,
         maximal_pulse=B_max,               # Or total integral limit
-        maximal_amplitude=B_max/16,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
-        maximal_frequency=2 * 2*np.pi * 1e6,
-        minimal_frequency=-2 * 2*np.pi * 1e6,
-        maximal_phase=10*np.pi,
+        maximal_amplitude=B_max/8,             # Normalized: optimizer outputs b(t) ∈ [-1, 1]
+        maximal_frequency=5 * 2*np.pi * 1e6,
+        minimal_frequency=-5 * 2*np.pi * 1e6,
+        maximal_phase=11*np.pi,
         channel_type="MW"
     )
 ]
@@ -104,8 +104,8 @@ pulse_settings_list = [
 # -----------------------------
 # Step 2: Simulation parameters
 # -----------------------------
-duration_ns = 1500
-steps_per_ns = 1 # show mathematicallz why this is fine
+duration_ns = 2000
+steps_per_ns = 0.5 # show mathematicallz why this is fine
 time_grid = get_time_grid(duration_ns, steps_per_ns)
 
 
@@ -189,8 +189,8 @@ goal_fn = get_goal_function(
 # -----------------------------
 # Step 5: Load or Generate x0
 # -----------------------------
-use_previous = False
-resume_from = "results/pulse_2025-10-21_13-53-12"#"results/pulse_2025-09-02_10-30-53"  # Path to previous result
+use_previous = True
+resume_from = "results/pulse_2026-01-15_11-39-48"#"results/pulse_2025-09-02_10-30-53"  # Path to previous result
 sample_size = 50
 
 if use_previous:
@@ -233,7 +233,7 @@ else:
 # Step 6: CMA-ES optimization
 # -----------------------------
 algo_type = "CMA-ES"  # or "Nelder Mead"
-iterations = 200
+iterations = 500
 superiterations = 1
 log = True
 verbose = True

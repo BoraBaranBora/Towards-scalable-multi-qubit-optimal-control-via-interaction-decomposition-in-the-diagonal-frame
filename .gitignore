@@ -2,7 +2,12 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-*.png
+#*.png
 
 
 /results
+*.py
+!*src/reproduce_numerics.py
+!*src/three_qubit_gate_utils.py
+!*src/evolution.py
+!*src/quantum_model_NV.py

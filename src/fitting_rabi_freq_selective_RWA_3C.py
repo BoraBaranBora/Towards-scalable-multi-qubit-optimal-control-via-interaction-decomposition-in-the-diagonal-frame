@@ -24,7 +24,7 @@ from quantum_model_3C import (
 #   1 carbon  -> [1]
 #   2 carbons -> [1,2]
 #   up to the number available in your parameter arrays (here up to 4)
-set_active_carbons([1,2,3,4])   # <-- change this list to pick N_C
+set_active_carbons([1,3,4])   # <-- change this list to pick N_C
 
 print("Active carbons:", get_active_carbons())
 pc = get_precomp()

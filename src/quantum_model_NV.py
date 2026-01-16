@@ -15,10 +15,10 @@ D   = torch.tensor(2.87e3, dtype=torch.float64)     # GHz
 γ_e = torch.tensor(28.0e3, dtype=torch.float64)     # GHz/T
 
 # index 0 = 14N, 1.. = 13C's
-γ_n   = torch.tensor([3.077, 10.71, 10.71, 10.71, 10.71], dtype=torch.float64)  # MHz/T
-Azz_n = torch.tensor([-2.14, 2.281, 1.884, -1.386, -1.011], dtype=torch.float64) # MHz
-A_ort_n = torch.tensor([0.0, 0.24, 0.208, 0.13, 0.014], dtype=torch.float64)     # MHz
-Q_n   = torch.tensor([-5.01, 0.0, 0.0, 0.0, 0.0], dtype=torch.float64)           # MHz
+γ_n   = torch.tensor([3.077, 10.71, 10.71], dtype=torch.float64)  # MHz/T
+Azz_n = torch.tensor([-2.14, 2.281, -1.011], dtype=torch.float64) # MHz
+A_ort_n = torch.tensor([0.0, 0.24, 0.014], dtype=torch.float64)     # MHz
+Q_n   = torch.tensor([-5.01, 0.0, 0.0], dtype=torch.float64)           # MHz
 ϕ_n   = torch.tensor([0.0, 0.0], dtype=torch.float64)                            # rad (given)
 
 # ── frequency helpers (return MHz unless noted)

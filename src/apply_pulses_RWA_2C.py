@@ -9,7 +9,17 @@ from quantum_model_3C import (
     set_active_carbons, get_active_carbons, get_precomp
 )
 from evolution import get_evolution_vector
+import matplotlib as mpl
 
+mpl.rcParams.update({
+    "font.size": 18,          # base font size
+    "axes.titlesize": 18,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 18,
+    "ytick.labelsize": 18,
+    "legend.fontsize": 18,
+    "figure.titlesize":18,
+})
 # -----------------------------
 # Helper: load one checkpoint
 # -----------------------------
@@ -578,6 +588,8 @@ pulse_dirs = [
 
     #Path("results/pulse_2025-12-15_12-05-12") # gradient 11Basis 1400mus 6e-3
 
+
+
     #Path("results/pulse_2025-12-15_14-18-53") # report #interesting #goood [1,4] carbons going to 2pi and 3/4pi and shit
 
     #Path("results/pulse_2025-12-15_14-49-25") # best [1,4] carbons going to 0pi and pi/4 # 2e-3
@@ -592,7 +604,7 @@ pulse_dirs = [
 
     #Path("results/pulse_2025-12-15_19-32-55") # 8er basis goood [1,4] carbons going to 0pi and pi/4
 
-    #Path("results/pulse_2025-12-15_19-46-34") # 11er basis goood [1,4] carbons going to 0pi and pi/4
+    #Path("results/pulse_2025-12-15_19-46-34") # 11er basis goood [1,4] carbons going to 0pi and pi/4 
 
     #Path("results/pulse_2025-12-15_19-50-40") # 11er basis goood [1,4] carbons going to 0pi and pi/4
     #Path("results/pulse_2025-12-15_19-57-14") # interesing # 1525 1mus 1er basis goood [1,4] carbons going to 0pi and pi/4
@@ -623,7 +635,7 @@ pulse_dirs = [
     #Path("results/pulse_2025-12-17_14-40-54") #  0.98
     #Path("results/pulse_2025-12-17_14-36-34") #  0.96
 
-    Path("results/pulse_2025-12-17_14-44-22") #  0.998
+    Path("results/pulse_2025-12-17_14-44-22") # report # 0.998
 
 
 
@@ -812,11 +824,53 @@ def plot_drives(drives, time_grids, outdir: Path, title="MW Pulse"):
         # stitch channel ch
         t_ch = np.concatenate([t for c,t in pieces_t if c==ch])
         y_ch = np.concatenate([y for c,y in pieces_y if c==ch])
-        plt.plot(t_ch*1e9, y_ch, label=f"Drive {ch+1}")
+        plt.plot(t_ch*1e9, y_ch)#, label=f"Drive {ch+1}")
     plt.xlabel("Time [ns]")
     plt.ylabel("Amplitude [μT]")
     plt.title(title)
     plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(outdir / "drives_concatenated.png", dpi=200)
+    plt.show()
+
+
+def plot_drives(drives, time_grids, outdir: Path, title="MW Pulse",
+                gamma_e_rad_per_us_per_T = 175929.1886):  # example NV value
+    """
+    Plot concatenated drives as Rabi frequency [rad/µs] vs time [ns].
+
+    Assumes drive amplitudes in µT and simulation in rad/µs units.
+    """
+    pieces_t = []
+    pieces_y = []
+    t_acc = 0.0
+
+    for tg, drv in zip(time_grids, drives):
+        dt = float((tg[1] - tg[0]).item())   # time step in s
+        t = t_acc + np.arange(len(tg)) * dt
+        for ch, d in enumerate(drv):
+            pieces_t.append((ch, t.copy()))
+            pieces_y.append((ch, d.detach().cpu().numpy().copy()))
+        t_acc += dt * len(tg)
+
+    plt.figure(figsize=(10, 4))
+    nchan = len(drives[0])
+
+    for ch in range(nchan):
+        t_ch = np.concatenate([t for c, t in pieces_t if c == ch])
+        y_ch_uT = np.concatenate([y for c, y in pieces_y if c == ch])  # µT
+
+        # µT → T → rad/µs
+        B_T = y_ch_uT * 1e-6
+        Omega_rad_per_us = gamma_e_rad_per_us_per_T * B_T
+
+        plt.plot(t_ch * 1e9, Omega_rad_per_us, label=f"Drive {ch+1}")
+
+    plt.xlabel("Time [ns]")
+    plt.ylabel("Rabi frequency [rad/µs]")
+    plt.title(title)
+    #plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(outdir / "drives_concatenated.png", dpi=200)
@@ -1659,6 +1713,69 @@ pop_3q = compute_3q_population_trajectory(
     idx_N=idx_N,
 )
 
+
+def plot_3q_populations(time_axis_ns, pop_3q, outdir: Path,
+                        filename: str = "populations_3q_000_to_111.png",
+                        title: str = "Populations of |abc⟩ (e, C1, C2)"):
+    """
+    Plot populations of |000>,...,|111> vs time,
+    shade and integrate population of |100>.
+    """
+    labels = [f"|{a}{b}{c}⟩"
+              for a in (0,1)
+              for b in (0,1)
+              for c in (0,1)]
+
+    # --- |100> index and population ---
+    idx_100 = 4
+    pop_100 = pop_3q[:, idx_100]
+    area_100 = np.trapz(pop_100, time_axis_ns)  # ns
+
+    plt.figure(figsize=(10, 6))
+
+    # --- plot all populations ---
+    for i, lab in enumerate(labels):
+        lw = 2.5 if i == idx_100 else 1.5
+        plt.plot(time_axis_ns, pop_3q[:, i], label=lab, linewidth=lw)
+
+    # --- shade area under |100> ---
+    plt.fill_between(
+        time_axis_ns,
+        pop_100,
+        alpha=0.25,
+        zorder=0,
+        label=r"Area under $|100\rangle$"
+    )
+
+    plt.xlabel("Time (ns)")
+    plt.ylabel("Population")
+    plt.title(title)
+    plt.legend(ncol=2)
+    plt.grid(True)
+
+    # --- annotation ---
+    textstr = (
+        r"$\int P_{|100\rangle}(t)\,dt$" + "\n"
+        f"$= {area_100:.3f}\\,\\mathrm{{ns}}$"
+    )
+    plt.text(
+        0.98, 0.2, textstr,
+        transform=plt.gca().transAxes,
+        fontsize=15,
+        verticalalignment='center',
+        horizontalalignment="right",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85)
+    )
+
+    plt.tight_layout()
+    outpath = outdir / filename
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(outpath, dpi=200)
+    plt.show()
+
+    print(f"Saved 3-qubit population plot to: {outpath}")
+    print(f"∫ P_|100>(t) dt = {area_100:.6f} ns")
+
 plot_3q_populations(
     time_axis_ns,
     pop_3q,
@@ -2029,16 +2146,7 @@ def compute_all_phases_vs_time_principal(time_grids, drives, Δ_e,
     return time_axis_ns, phases
 
 
-import matplotlib as mpl
 
-mpl.rcParams.update({
-    "font.size": 15,          # base font size
-    "axes.titlesize": 15,
-    "axes.labelsize": 15,
-    "xtick.labelsize": 15,
-    "ytick.labelsize": 15,
-    "legend.fontsize": 15,
-})
 
 def plot_all_invariants_one_plot(
     pulse_dir: Path,
@@ -2067,14 +2175,14 @@ def plot_all_invariants_one_plot(
     plt.figure(figsize=(12, 6), dpi=200)
 
     # --- 1-body invariants ---
-    plt.plot(time_axis, ph["alpha_u"], label=r"$\Delta_{\{a\}}$ (single, e)")
-    plt.plot(time_axis, ph["beta_u"],  label=r"$\Delta_{\{b\}}$ (single, C1)")
-    plt.plot(time_axis, ph["chi_u"],   label=r"$\Delta_{\{c\}}$ (single, C2)")
+    plt.plot(time_axis, ph["alpha_u"], label=r"$\Delta_{\{a\}}$")# (single, e)")
+    plt.plot(time_axis, ph["beta_u"],  label=r"$\Delta_{\{b\}}$")# (single, C1)")
+    plt.plot(time_axis, ph["chi_u"],   label=r"$\Delta_{\{c\}}$")# (single, C2)")
 
     # --- 2-body invariants ---
-    plt.plot(time_axis, ph["gamma_ab_u"], label=r"$\Delta_{\{a,b\}}$ (e–C1)")
-    plt.plot(time_axis, ph["gamma_ac_u"], label=r"$\Delta_{\{a,c\}}$ (e–C2)")
-    plt.plot(time_axis, ph["gamma_bc_u"], label=r"$\Delta_{\{b,c\}}$ (C1–C2)")
+    plt.plot(time_axis, ph["gamma_ab_u"], label=r"$\Delta_{\{a,b\}}$")# (e–C1)")
+    plt.plot(time_axis, ph["gamma_ac_u"], label=r"$\Delta_{\{a,c\}}$")# (e–C2)")
+    plt.plot(time_axis, ph["gamma_bc_u"], label=r"$\Delta_{\{b,c\}}$")# (C1–C2)")
 
     # --- 3-body invariant ---
     plt.plot(
@@ -2104,7 +2212,7 @@ def plot_all_invariants_one_plot(
     plt.title("Time Evolution of Three-Qubit (e,C1,C2) Phase Invariants")
     plt.grid(True)
 
-    plt.legend(ncol=2, frameon=True)
+    plt.legend(ncol=2, frameon=True, loc='upper left')
 
     plt.tight_layout()
     outpath = outdir / filename
@@ -2314,14 +2422,14 @@ def plot_all_invariants_one_plot(
     plt.figure(figsize=(12, 6))
 
     # --- 1-body invariants ---
-    plt.plot(time_axis, ph["alpha_u"], label=r"$\Delta_{\{a\}}$ (single, e)")
-    plt.plot(time_axis, ph["beta_u"],  label=r"$\Delta_{\{b\}}$ (single, C1)")
-    plt.plot(time_axis, ph["chi_u"],   label=r"$\Delta_{\{c\}}$ (single, C2)")
+    plt.plot(time_axis, ph["alpha_u"], label=r"$\Delta_{\{a\}}$")# (single, e)")
+    plt.plot(time_axis, ph["beta_u"],  label=r"$\Delta_{\{b\}}$")# (single, C1)")
+    plt.plot(time_axis, ph["chi_u"],   label=r"$\Delta_{\{c\}}$")# (single, C2)")
 
     # --- 2-body invariants ---
-    plt.plot(time_axis, ph["gamma_ab_u"], label=r"$\Delta_{\{a,b\}}$ (e–C1)")
-    plt.plot(time_axis, ph["gamma_ac_u"], label=r"$\Delta_{\{a,c\}}$ (e–C2)")
-    plt.plot(time_axis, ph["gamma_bc_u"], label=r"$\Delta_{\{b,c\}}$ (C1–C2)")
+    plt.plot(time_axis, ph["gamma_ab_u"], label=r"$\Delta_{\{a,b\}}$")# (e–C1)")
+    plt.plot(time_axis, ph["gamma_ac_u"], label=r"$\Delta_{\{a,c\}}$")# (e–C2)")
+    plt.plot(time_axis, ph["gamma_bc_u"], label=r"$\Delta_{\{b,c\}}$")# (C1–C2)")
 
     # --- 3-body invariant ---
     plt.plot(

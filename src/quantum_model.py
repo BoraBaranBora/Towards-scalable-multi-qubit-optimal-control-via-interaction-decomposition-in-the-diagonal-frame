@@ -10,11 +10,11 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # Constants
 Gauss_to_Tesla = 0.0001
 B_0 = torch.tensor(4500.0 * Gauss_to_Tesla, dtype=torch.float64)
-D = torch.tensor(2.87e3, dtype=torch.float64)  # GHz
-γ_e = torch.tensor(28.0e3, dtype=torch.float64)  # GHz/T
+D = torch.tensor(2.87e3, dtype=torch.float64)  # [MHz]
+γ_e = torch.tensor(28.0e3, dtype=torch.float64)  # [MHz/T]
 
-γ_n = torch.tensor([3.077, 10.71, 10.71, 10.71, 10.71], dtype=torch.float64)  # MHz/T
-Azz_n = torch.tensor([-2.14, 2.281, 1.884, -1.386, -1.011], dtype=torch.float64)  # MHz
+γ_n = torch.tensor([3.077, 10.71, 10.71, 10.71, 10.71], dtype=torch.float64)  # [MHz/T]
+Azz_n = torch.tensor([-2.14, 2.281, 1.884, -1.386, -1.011], dtype=torch.float64)  # [MHz]
 A_ort_n = torch.tensor([0.0, 0.24, 0.208, 0.13, 0.014], dtype=torch.float64)
 Q_n = torch.tensor([-5.01, 0.0, 0.0, 0.0, 0.0], dtype=torch.float64)
 ϕ_n = torch.tensor([0.0, 0.0], dtype=torch.float64)
