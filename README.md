@@ -1,6 +1,7 @@
  ## Reproducing the numerical demonstrations
 
-This repository accompanies the paper *Scalable diagonal-frame multi-qubit optimal control with k-body interaction decomposable targets* and provides the data and scripts used in the numerical demonstrations shown in the manuscript.
+This repository accompanies the paper *Towards scalable multi-qubit optimal control
+via interaction decomposition in the diagonal frame* and provides the data and scripts used in the numerical demonstrations shown in the manuscript.
 
 The results demonstrate that specifying multi-qubit control targets in a diagonal frame enables scalable k-body decomposable objectives, substantially reducing target specification and optimization complexity. On a simulated room-temperature NV–\(^{14}\)N–\(^{13}\)C–\(^{13}\)C register, this approach enables genuinely tripartite entangling gates to be synthesized with a single shaped microwave pulse, achieving fidelities ≈ 0.999 and yielding a 10–100× speed-up compared with previous multi-qubit entanglers beyond two qubits on this platform.
 
