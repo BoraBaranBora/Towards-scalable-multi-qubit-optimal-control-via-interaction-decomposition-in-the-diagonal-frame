@@ -26,23 +26,12 @@ To regenerate the figures:
 
 ```bash
 # Diagonal gate (ZZZ)
-python src/reproduce_numerics --gate diagonal
+python reproduce_numerics --gate diagonal
 
 # Non-diagonal gate (XZZ)
-python src/reproduce_numerics --gate nondiagonal
+python reproduce_numerics --gate nondiagonal
 
 ```
-### Repository Structure
 
-├─ results/
-│ ├─ pulse_diagonal/ # diagonal (ZZZ) data
-│ └─ pulse_nondiagonal/ # non-diagonal (XZZ) data
-├─ src/
-│ ├─ three_qubit_gate_utils.py # gate synthesis and k-body analysis
-│ └─ reproduce_numerics.py # thin wrapper for generating paper figures
-├─ figs/
-│ ├─ diagonal/
-│ └─ nondiagonal/
-└─ README.md
 
 
