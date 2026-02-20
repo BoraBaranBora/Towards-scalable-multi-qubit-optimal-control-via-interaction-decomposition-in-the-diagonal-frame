@@ -10,3 +10,8 @@ __pycache__/
 !*src/three_qubit_gate_utils.py
 !*src/evolution.py
 !*src/quantum_model_NV.py
+!*src/pulse_settings.py
+
+
+fom_log.txt
+.DS_Store
