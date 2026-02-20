@@ -2,7 +2,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-#*.png
+*.png
 
 /results
 *.py
