@@ -1,9 +1,10 @@
 # reproduce_numerics.py
 """
-Reproduce the numerical demonstration plots for the three-qubit gate.
+Reproduce the numerical demonstration plots.
 
 This script is intended as the main entry point for the GitHub repository
-accompanying the theory paper. It produces, for each gate type:
+accompanying the theory paper *Towards scalable multi-qubit optimal control
+via interaction decomposition in the diagonal frame*. It produces, for each gate type:
 
   1) Pulse shape (drive amplitudes → Rabi frequency vs time)
   2) Three-qubit populations vs time in the (e, C1, C2) computational basis
