@@ -6,7 +6,7 @@ __pycache__/
 
 /results
 *.py
-!*src/reproduce_numerics.py
+!*reproduce_numerics.py
 !*src/three_qubit_gate_utils.py
 !*src/evolution.py
 !*src/quantum_model_NV.py
