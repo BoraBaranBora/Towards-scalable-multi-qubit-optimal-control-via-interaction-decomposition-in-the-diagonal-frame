@@ -204,7 +204,7 @@ def run_demo(gate_key: str):
     print("=== Done. Figures saved to:", fig_dir, "===\n")
 
 
-#if __name__ == "_main_":
+
 parser = argparse.ArgumentParser(
     description="Reproduce numerical demonstrations for diagonal and non-diagonal three-qubit gates."
 )
