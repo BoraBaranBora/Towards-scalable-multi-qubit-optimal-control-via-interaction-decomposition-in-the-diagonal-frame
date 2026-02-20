@@ -12,7 +12,7 @@ from quantum_model_NV import (
     get_U_RWA, ω1, γ_e,
     get_active_carbons
 )
-from evolution import get_evolution_vector
+from src.evolution import get_evolution_vector
 
 mpl.rcParams.update({
     "font.size": 18,
